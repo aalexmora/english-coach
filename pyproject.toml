@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "english-coach"
+version = "0.8.1"
+description = "English domain and server-side methodology for GPT Saver's public memory API"
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2,<3", "httpx[socks]>=0.28,<1", "PyJWT[crypto]>=2.14,<3"]
+[tool.setuptools.packages.find]
+include = ["english_coach*"]
+[tool.setuptools.package-data]
+english_coach = ["web/*.html", "web/*.js", "web/*.css"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]

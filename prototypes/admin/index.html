@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>English Coach — личный кабинет · прототип</title>
+  <script>
+    // Only appearance is stored; learner data stays in fictional fixtures.
+    (() => {
+      let mode = 'system';
+      try { mode = localStorage.getItem('english-coach-ui-theme') || mode; } catch {}
+      if (!['light', 'dark', 'system'].includes(mode)) mode = 'system';
+      const dark = mode === 'dark' || (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.themeMode = mode;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css">
+  <script src="profiles.js" defer></script>
+  <script src="conversation.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Перейти к содержимому</a>
+  <aside class="sidebar" id="sidebar" aria-label="Основная навигация"></aside>
+  <div class="workspace">
+    <header class="topbar">
+      <button class="icon-button mobile-menu" id="menu-button" aria-label="Открыть меню" aria-expanded="false"></button>
+      <div class="breadcrumb">Личный кабинет <span>/</span> <strong id="breadcrumb">Обзор</strong></div>
+      <form id="search-form" class="global-search" role="search">
+        <span id="search-icon"></span>
+        <input id="global-search" aria-label="Поиск по кабинету" placeholder="Тема, фраза или урок…" autocomplete="off">
+        <kbd>↵</kbd>
+      </form>
+      <button class="avatar" data-action="navigate" data-page="settings" aria-label="Открыть настройки">А</button>
+    </header>
+    <div class="workspace-tools" aria-label="Профиль и внешний вид">
+      <label class="profile-picker" for="learner-profile"><span>Учебный профиль</span><select class="select" id="learner-profile" aria-label="Учебный профиль"><option value="alexander">Александр · база</option><option value="katya">Катя · разговор</option></select></label>
+      <span class="demo-context">Демо · личный вход не подключён</span>
+      <label class="theme-picker" for="theme-mode"><span>Тема</span><select class="select" id="theme-mode" aria-label="Тема интерфейса"><option value="system">Как в системе</option><option value="light">Светлая</option><option value="dark">Тёмная</option></select></label>
+    </div>
+    <main id="main" tabindex="-1"></main>
+    <footer class="footer">English Coach <span>Интерактивный прототип · все учебные данные вымышлены</span></footer>
+  </div>
+  <dialog id="detail-dialog" aria-labelledby="detail-title">
+    <div class="drawer-top"><span class="eyebrow">Подробности</span><button class="icon-button" data-action="close-detail" aria-label="Закрыть подробности">✕</button></div>
+    <div id="detail-body"></div>
+  </dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
