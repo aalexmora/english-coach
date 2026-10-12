@@ -8,6 +8,8 @@ Obsidian English backlog, IDEA-004 with links to IDEA-001/002.
 
 Cabinet: https://eng.moras.keenetic.pro (redirects to `/english`).
 Release: Coach **0.9.0**, UI **0.4.0**, teaching policies **1.0.0**.
+Nginx first requests the credentials configured in `admin-protect`.
+The personal Saver login below is a separate second step.
 The owner leaves the login field empty and uses the existing private Saver code.
 Family members use their personal login/code. Codes are never included in Git.
 
@@ -33,7 +35,10 @@ Before production changes, back up the existing memory/auth databases with the
 host's `scripts/backup.py`, verify integrity/checksums, preserve private config
 and retain the current Docker image. Do not publish backups, credentials or
 learner exports. The host's `deploy/english-cabinet-nginx.conf` is the cabinet
-Proxy Host's advanced configuration; change the saved NPM host, not only its
+Proxy Host's advanced configuration, paired with native Custom Locations in
+`deploy/english-cabinet-locations.json` so NPM applies its Access List. The
+original MCP host uses `deploy/english-mcp-domain-nginx.conf` to block cabinet
+paths while preserving OAuth/MCP. Change the saved NPM host, not only its
 generated file. `deploy/mcp-gpt-saver.service` restores this container after
 Docker/network startup and retries while its configured address is unavailable.
 
