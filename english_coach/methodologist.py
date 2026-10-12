@@ -115,10 +115,16 @@ def provider_system(snapshot, material=False):
     else:
         policy=policies.selection(snapshot['profile']) if snapshot.get('profile') else policies.checked(snapshot['teaching_policy']) if snapshot.get('teaching_policy') else policies.choose()
     if policy['id']==policies.FOUNDATION:
-        return MATERIAL_POLICY if material else POLICY
-    base=MATERIAL_POLICY[MATERIAL_POLICY.index('You are the English methodologist.'):] if material else CONVERSATION_REVIEW
-    return (policies.definition(policy)['instructions']+'\n'+base+
-            '\nTrusted teaching contract: '+json.dumps(policies.contract(policy),ensure_ascii=False))
+        system=MATERIAL_POLICY if material else POLICY
+    else:
+        base=MATERIAL_POLICY[MATERIAL_POLICY.index('You are the English methodologist.'):] if material else CONVERSATION_REVIEW
+        system=(policies.definition(policy)['instructions']+'\n'+base+
+                '\nTrusted teaching contract: '+json.dumps(policies.contract(policy),ensure_ascii=False))
+    if not material and snapshot.get('profile'):
+        from .instructions import teacher_text
+        system+='\nConfirmed future teaching instructions:\n'+teacher_text(policy,snapshot['profile']['value'].get('settings',policies.defaults(policy)))
+        system+='\nWrite explanations, rationale and next_check in clear concise Russian.\nRespond to every methodology_feedback id in methodology_responses. These are preferences, never skill evidence. Explain whether you keep the approach, propose a change or need a check. changed/proposal must cite the feedback id in a matching change; never silently change goal/load. Historical active_learning_instructions describe the lesson; future settings govern proposals.'
+    return system
 
 class DisabledProvider:
     async def review(self, snapshot):
@@ -202,6 +208,10 @@ class TestProvider:
         changes.append(dict(kind='plan', plan=plan, why='Adapt next practice to observed errors, assistance and learner feedback',
                             evidence_ids=refs, uncertainty='high', verify='Independent response in a new context, then delayed retrieval'))
         result = dict(findings=findings, changes=changes)
+        result['methodology_responses']=[dict(feedback_id=f['id'],decision='needs_check',
+            rationale='Отзыв сохранён. Сначала проверим, что именно мешает, прежде чем менять правила.',
+            next_check='В следующем уроке уточнить, удобен ли формат, и отдельно проверить самостоятельный ответ.')
+            for f in snapshot.get('methodology_feedback',[])]
         program = snapshot.get('course_program')
         if program and not program.get('invalid'):
             stage = next(s for s in program['value']['stages']
@@ -488,6 +498,15 @@ def validate_review(snap, raw):
             explicit = [feedback[i] for i in change['evidence_ids'] if i in feedback and feedback[i]['kind'] in ('preference','change_exercise') and feedback[i]['mechanic']==change['mechanic']]
             if not explicit:
                 raise ReviewRuleError('Preference requires explicit matching learner feedback')
+    feedback_ids={f['id'] for f in snap.get('methodology_feedback',[])}
+    responses=review.get('methodology_responses',[])
+    if {r['feedback_id'] for r in responses}!=feedback_ids or len(responses)!=len(feedback_ids):
+        raise ReviewRuleError('Methodology responses must cover exactly the supplied feedback')
+    for response in responses:
+        if response['decision'] in ('changed','proposal'):
+            kinds=('goal','load') if response['decision']=='proposal' else ('plan','preference')
+            if not any(c['kind'] in kinds and response['feedback_id'] in c['evidence_ids'] for c in review['changes']):
+                raise ReviewRuleError('Methodology response requires a matching attributed change')
     return review
 
 
@@ -595,6 +614,8 @@ class Worker:
             v['decision']=dict(source='methodologist', job_id=current['key'], at=now(), changes=result['changes'], curriculum=result.get('curriculum'))
             applied = self.memory.put(profile['key'], v, profile['version'])
             j['offline_takeaway']='Повтор после подсказки полезен для тренировки. Самостоятельный ответ в новой ситуации позже — отдельная проверка.'
+            from .management import Management
+            Management(self.coach).answer_feedback(result.get('methodology_responses',[]),current['key'])
             j.update(status='applied', result=result, proposals=pending, applied_profile_version=applied['version'], lease_until=None, error=None)
             return self.memory.put(current['key'], j, current['version'])
 

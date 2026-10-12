@@ -65,7 +65,7 @@ def test_coach_over_tcp_oauth_and_restart(tmp_path):
                         if phase=='coach-speaking-read':
                             from datetime import datetime,timezone
                             ctx=await tool('get_english_context',{})
-                            assert ctx['methodology']['coach_version']=='0.8.2'
+                            assert ctx['methodology']['coach_version']=='0.9.0'
                             assert ctx['methodology']['profile_version']==ctx['profile']['version']
                             assert ctx['work_material'][0]['phrase']=='Could we clarify the delivery date before we commit?'
                             practice=next(p for p in ctx['speaking']['open_practices'] if p['key']==entry_id['practice'])

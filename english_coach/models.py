@@ -167,10 +167,18 @@ class CurriculumDecision(Strict):
     next_check: str = Field(min_length=1, max_length=1000)
 
 
+class MethodologyResponse(Strict):
+    feedback_id: str = Field(min_length=1,max_length=120)
+    decision: Literal['kept','changed','proposal','needs_check']
+    rationale: str = Field(min_length=1,max_length=500)
+    next_check: str = Field(min_length=1,max_length=300)
+
+
 class Review(Strict):
     curriculum: CurriculumDecision | None = None
     findings: list[Finding] = Field(max_length=20)
     changes: list[Change] = Field(max_length=10)
+    methodology_responses: list[MethodologyResponse] = Field(default_factory=list,max_length=3)
 
 class Settings(Strict):
     preferred_mechanic: Mechanic = 'roleplay'

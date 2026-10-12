@@ -248,9 +248,18 @@ class Coach:
             if len(items)>30:
                 raise ValueError('Too many unfinished items; complete or explicitly revise the existing plan')
             policy=policies.selection(p)
+            from .management import Management
+            from .instructions import contract
+            manager=Management(self)
+            effective,trial=manager.lesson_config(p)
+            policy=effective['policy']
+            if trial:
+                items=[dict(i,mechanic=effective['settings']['preferred_mechanic'],mechanic_version=1) for i in items]
             for item in items: policies.check_activity(policy,item['mechanic'],item['task'],item.get('activity','communicative'))
             v = dict(teaching_policy=policy,grammar_permissions={},learner_id=self.learner_id, session_id=s['id'], phase='active', items=items, branch=None, profile_version=p['version'],
-                     settings_snapshot=deepcopy(p['value']['settings']), current_item_id=None, usages=[], feedback=[],
+                     settings_snapshot=deepcopy(effective['settings']),goal_snapshot=deepcopy(effective['goal']),
+                     instruction_snapshot=contract(policy,effective['settings']),method_trial_id=trial['value']['id'] if trial else None,
+                     current_item_id=None, usages=[], feedback=[],
                      adopted_legacy=bool(old_active), created_at=now())
             if p['value'].get('conversation'):
                 from .conversation import Conversation
@@ -260,6 +269,7 @@ class Coach:
             v['retrieval_opening'] = speaking['next_lesson_opening']
             v['opening_note'] = 'Use these targets within the existing plan time, then return to unfinished items; no mandatory extra block.'
             doc = self.memory.put('coach-session-'+s['id'], v, 0)
+            manager.begin_trial(trial,s['id'])
             if carry:
                 self.memory.put('coach-carry', dict(items=[]), carry['version'])
             return dict(say_first=self.opening_line(p),
@@ -452,6 +462,10 @@ class Coach:
                         source_counts=dict(observations=len(current['attempts']), feedback=len(v['feedback'])),
                         session_version=current['session']['version'],
                         skill_evidence=self.skill_evidence(p['value']['goal'], self.legacy.observations()))
+        from .management import Management
+        snapshot['methodology_feedback']=Management(self).pending_feedback()
+        bounded_session['value']['feedback'] += [dict(id=f['id'],kind='other',text=f['text'],mechanic=None) for f in snapshot['methodology_feedback']]
+        snapshot['active_learning_instructions']=deepcopy(sd['value'].get('instruction_snapshot'))
         if v.get('conversation'):
             from .conversation import Conversation
             snapshot['conversation']=Conversation(self).review_context(sid,observation_ids)
@@ -534,6 +548,8 @@ class Coach:
             v['resume_note']=note
             result = self.memory.put(sd['key'], v, sd['version'])
             if action=='finish':
+                from .management import Management
+                Management(self).end_trial(sid)
                 if v.get('conversation'):
                     from .conversation import Conversation
                     result['conversation_summary']=Conversation(self).freeze_summary(sid)

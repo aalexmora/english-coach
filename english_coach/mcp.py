@@ -14,7 +14,7 @@ def register(mcp, factory: Callable, read, write, Attempt):
 
     @mcp.tool(annotations=read)
     def get_english_admin_view(section:str='overview',days:int=14,start:str|None=None,end:str|None=None,query:str='',status:str='',mode:str='',limit:int=20,offset:int=0,learner_id:str|None=None) -> dict[str,Any]:
-        """Read full paginated admin projections with all matching aggregates, Moscow date boundaries, source versions and coverage. Named sections: overview/program/progress/vocabulary/lessons/methodologist/materials/settings. Atomic host snapshot; never launches a model, changes lexical exposure or fabricates learning history."""
+        """Read full paginated admin projections with all matching aggregates, Moscow date boundaries, source versions and coverage. Main sections: home/methodology/roadmap/decisions. Legacy projections: overview/program/progress/vocabulary/lessons/methodologist/materials/settings. Atomic host snapshot; never launches a model, changes lexical exposure or fabricates learning history."""
         from .admin import AdminRead
         return AdminRead(resolve(learner_id)).read(section,days,start,end,query,status,mode,limit,offset)
 

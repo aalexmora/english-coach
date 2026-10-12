@@ -222,7 +222,7 @@ def test_real_host_routes_and_read_mcp_catalog(tmp_path,monkeypatch):
     with TestClient(app,base_url=BASE) as client:
         assert login(client).status_code==303
         assert client.get('/english/api/view',params=params('owner')).json()['configured'] is False
-        assert client.get('/english/api/view',params=params('owner','settings')).json()['ui_version']=='0.3.1'
+        assert client.get('/english/api/view',params=params('owner','settings')).json()['ui_version']=='0.4.0'
         assert client.get('/health').status_code==200
 
 
@@ -261,3 +261,27 @@ def test_json_browser_login_preserves_csrf_and_returns_no_credentials(web):
         assert client.get('/english/api/view',params=params('owner','progress')).status_code==200
         assert client.get('/english/assets/login.js').status_code==200
         assert 'HttpOnly' in r.headers['set-cookie'] and 'SameSite=strict' in r.headers['set-cookie']
+
+
+def test_methodology_workflow_via_authenticated_ui_and_scoped_views(web):
+    app,p,c,k,kid=web
+    with TestClient(app,base_url=BASE) as client:
+        assert login(client).status_code==303
+        for section in ('home','methodology','roadmap','decisions'):
+            r=client.get('/english/api/view',params=params('owner',section));assert r.status_code==200
+            assert r.json()['management']['profile_version']==c.profile()['version']
+        settings=deepcopy(c.profile()['value']['settings']);settings['prompt_style']='guided'
+        args=dict(expected_profile_version=c.profile()['version'],expected_draft_version=0,data=dict(policy_id='foundation',grammar_exercises=True,settings=settings,minutes=15))
+        assert post(client,'method_draft',args).json()['ok']
+        doc=c.required('coach-method-draft')
+        r=post(client,'method_publish',dict(expected_profile_version=c.profile()['version'],expected_draft_version=doc['version'],mode='future'))
+        assert r.status_code==200 and r.json()['ok']
+        assert c.profile()['value']['settings']['prompt_style']=='guided'
+        assert k.memory.get('coach-method-draft') is None and k.memory.get('coach-profile') is None
+        # A pending draft is isolated even when the caller supplies the same action key.
+        assert client.get('/english/api/view',params=params(kid,'methodology')).status_code==403
+    with TestClient(app,base_url=BASE) as client:
+        assert login(client,kid,PERSONAL).status_code==303
+        assert client.get('/english/api/view',params=params('owner','methodology')).status_code==403
+        v=client.get('/english/api/view',params=params(kid,'methodology')).json()
+        assert v['management']['draft'] is None and v['configured'] is False

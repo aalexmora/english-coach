@@ -7,7 +7,7 @@ Obsidian English backlog, IDEA-004 with links to IDEA-001/002.
 ## Published cabinet
 
 Cabinet: https://eng.moras.keenetic.pro (redirects to `/english`).
-Release: Coach **0.8.2**, UI **0.3.1**, teaching policies **1.0.0**.
+Release: Coach **0.9.0**, UI **0.4.0**, teaching policies **1.0.0**.
 The owner leaves the login field empty and uses the existing private Saver code.
 Family members use their personal login/code. Codes are never included in Git.
 
@@ -129,7 +129,7 @@ by session and page. Future review snapshots include bounded conversation contex
 the next lesson shows saved correction focuses to revisit naturally. Only text
 conversation is supported; live pedagogical acceptance remains pending. The connected UI is implemented locally as described below.
 
-## Connected cabinet (UI 0.3.0)
+## Connected cabinet (UI 0.4.0)
 
 With `SAVER_ENGLISH_COACH=1`, the existing Saver host serves `/english`.
 The browser uses a private eight-hour HttpOnly, SameSite=Strict session cookie
@@ -140,13 +140,13 @@ The existing account throttling and host request-size limit apply. Login and eve
 write check the exact host origin and CSRF; no bearer token or code is placed in
 browser storage or URLs. Only the appearance preference uses localStorage.
 
-Eight named views read public MemoryAPI and LegacyEnglishAPI in an atomic host
+Four primary pages and eight legacy API projections read public MemoryAPI and LegacyEnglishAPI in an atomic host
 snapshot. Lists are paginated; aggregates cover all matching original observations,
 with Moscow date boundaries and independent/hint/imitation evidence separated.
 Vocabulary states and lifetime counts remain saved evidence, not a CEFR score.
 The UI shows each recorded historical policy, future plan, source usage, review
 findings and plan changes. Missing audio, usage accounting and unsaved provider
-history remain unavailable. Refresh, search, filters and bounded polling never
+history remain unavailable. Refresh, period filters and bounded polling never
 invoke a model or mutate learning history. The read-only MCP tool
 `get_english_admin_view` exposes the same named projections with authorized
 optional `learner_id`.
@@ -651,3 +651,21 @@ communicative goal and delayed-transfer task. This gate is not human editorial Q
 Package 0.6.1 keeps an awaiting-reuse pointer compatible with an explicitly begun
 next item; it still exposes conflicting active practice/item pointers with both
 candidate items for deliberate recovery. Combined verification: 110 tests passed.
+
+
+## Personal methodology management
+
+The cabinet has four primary pages: home, methodology and agent instructions,
+plan and progress, and methodologist decisions. Family access and theme settings
+are secondary. Original evidence remains available through existing public APIs.
+
+Named actions over MemoryAPI manage a personal persistent draft, deterministic
+lesson illustration, future publication, one-session trial, explicit keep/return,
+versioned restoration and methodology feedback. They use subject isolation,
+idempotency keys and optimistic concurrency; they do not create attempts.
+Active lessons retain their settings, goal and learning-instruction snapshots.
+A stored or delivered instruction is not a verified teacher-behaviour claim.
+Feedback answers are part of the strict review result and commit only with a
+fresh input snapshot. Goal/load changes still require the learner's decision.
+
+Authoritative requirements and acceptance remain in the linked Obsidian backlog.

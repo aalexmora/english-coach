@@ -159,7 +159,9 @@ def lesson_runtime(ctx, mode='standard'):
     if topic_binding and action['kind'] in ('begin_item','continue_item','free_practice') and not work:
         action['prompt']=topic_binding['topic']['questions'][0]
         action['instruction']='React to the last reply and choose one relevant follow-up; these questions are options, not a script to repeat.'
-    return dict(goal=p['value']['goal'],settings=settings,future_settings=p['value']['settings'],teaching_policy=policies.contract(policy),
+    from .instructions import teacher_text
+    return dict(goal=sv.get('goal_snapshot',p['value']['goal']),settings=settings,future_settings=p['value']['settings'],teaching_policy=policies.contract(policy),
+                teaching_instructions=teacher_text(policy,settings),
                 conversation=(dict(phase=conversation_state['snapshot']['phase'],route_status=conversation_state['snapshot']['route_status'],
                                    current_topic=topic_binding,free_topic_available=True,checkpoint_tool='save_english_conversation_block',
                                    next_verification_targets=(ctx.get('conversation') or {}).get('next_conversation',{}).get('verification_targets',[]),

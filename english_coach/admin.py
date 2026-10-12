@@ -11,15 +11,20 @@ from .homework import Homework
 from .material import MaterialIntake
 from .conversation import Conversation
 
-UI_VERSION='0.3.1'
+UI_VERSION='0.4.0'
 METRICS_VERSION='admin-metrics-1.0.0'
-UI_CHANGES=[dict(version=UI_VERSION,date='2026-10-11',status='installed_build',items=[
+UI_CHANGES=[dict(version=UI_VERSION,date='2026-10-12',status='installed_build',items=[
+    'Четыре понятных раздела; методика и инструкции на одном экране.',
+    'Личные черновики, пример занятия, применение, пробный урок и возврат правил.',
+    'Отзывы о методике и решения без поштучных фраз и технических журналов.']),
+    dict(version='0.3.1',date='2026-10-11',status='installed_build',items=[
     'Кабинет на отдельном HTTPS-домене с личным входом и защитой запросов.']),
     dict(version='0.3.0',date='2026-10-09',status='previous_build',items=[
     'Личный вход и разрешённые учебные профили.',
     'Восемь разделов с серверными данными, исходными ответами и отдельными версиями.',
     'Настройки, разрешение грамматики, разборы, предложения, история и семейные аккаунты.'])]
 SECTIONS=('overview','program','progress','vocabulary','lessons','methodologist','materials','settings')
+MANAGEMENT_SECTIONS=('home','methodology','roadmap','decisions')
 TZ=ZoneInfo('Europe/Moscow')
 
 
@@ -36,6 +41,8 @@ class AdminRead:
     def __init__(self,coach):self.c=coach
 
     def read(self,section='overview',days=14,start=None,end=None,query='',status='',mode='',limit=20,offset=0):
+        if section in MANAGEMENT_SECTIONS:
+            return self.management_view(section,days,start,end,query,status,mode,limit,offset)
         if section not in SECTIONS or days not in (0,7,14,30) or not 1<=limit<=100 or offset<0 or len(query)>200 or len(status)>40 or len(mode)>40:
             raise ValueError('Invalid view or filters')
         today=datetime.now(TZ).date();first=date.fromisoformat(start) if start else today-timedelta(days=days-1) if days else None
@@ -125,6 +132,49 @@ class AdminRead:
                               operations=dict(audio='unavailable',model_usage='unavailable',teaching_checks='not_recorded'))
             return result
 
+    def management_view(self,section,days,start,end,query,status,mode,limit,offset):
+        from .management import Management
+        with self.c.memory.atomic():
+            base=self.read('settings',days,start,end,query,status,mode,limit,offset)
+            names=('learner_id','generated_at','timezone','rules_version','source_versions','consistency','coverage','configured','policy','coach_version','ui_version')
+            result={k:base[k] for k in names};result['section']=section
+            result['management']=Management(self.c).read()
+            result['goal']=base['profile']['value']['goal'] if base['profile'] else None
+            if section=='home':
+                overview=self.read('overview',days,start,end,query,status,mode,limit,offset)
+                result.update({k:overview.get(k) for k in ('runtime','health','last_review','latest_saved','homework')})
+            elif section=='roadmap':
+                program=self.read('program',days,start,end,query,status,mode,limit,offset)
+                progress=self.read('progress',days,start,end,query,status,mode,limit,offset)
+                result.update({k:program.get(k) for k in ('program','conversation','current_session','future_plan','carry')})
+                labels={s['id']:s['outcome'] for s in (result['goal'] or {}).get('skills',[])}
+                result.update(skills=[dict(id=i,label=labels.get(i,i),**v) for i,v in progress['skills'].items()] if result['configured'] else [],
+                              metrics=progress['metrics'],daily=progress['daily'],conversation_progress=progress.get('conversation_progress'),period=progress['filters'])
+                trial=result['management'].get('trial')
+                if trial and trial['value'].get('session_id'):
+                    rows=self.c.legacy.get(trial['value']['session_id'])['attempts']
+                    result['trial_result']=dict(independent=ratio([r for r in rows if r['assistance']=='independent']),
+                                                note='Saved independent examples from this trial only; not proof of methodology effectiveness.')
+                history=result['management']['history']
+                if history:
+                    from .instructions import contract
+                    change=history[0]['value'];groups={};comparable=change['before']['goal']==change['after']['goal']
+                    for side in ('before','after'):
+                        cfg=change[side];digest=contract(cfg['policy'],cfg['settings'])['digest']
+                        ids={d['value']['session_id'] for d in self.c.documents('coach-session-')
+                             if d['value'].get('instruction_snapshot',{}).get('digest')==digest
+                             and d['value'].get('goal_snapshot')==cfg['goal']}
+                        rows=[a for a in self.c.legacy.observations() if a['session_id'] in ids and a['assistance']=='independent'
+                              and (not progress['filters']['start'] or datetime.fromisoformat(a['occurred_at']).astimezone(TZ).date().isoformat()>=progress['filters']['start'])
+                              and datetime.fromisoformat(a['occurred_at']).astimezone(TZ).date().isoformat()<=progress['filters']['end']]
+                        groups[side]=dict(independent=ratio(rows),lessons=len({a['session_id'] for a in rows}))
+                    result['method_comparison']=dict(**groups,comparable=comparable,at=change['at'],
+                        sufficient=comparable and all(g['independent']['total']>=3 for g in groups.values()))
+            elif section=='decisions':
+                review=self.read('methodologist',days,start,end,query,status,mode,limit,offset)
+                result.update(items=review['items'],total=review['total'],offset=review['offset'],limit=review['limit'],next_offset=review['next_offset'],health=review['health'])
+            return result
+
     def conversation_progress(self,observations):
         allowed={a['id'] for a in observations};rows=[r for r in Conversation(self.c).rows() if r['attempt_id'] in allowed];counts={}
         for r in rows:
@@ -181,6 +231,8 @@ class AdminAction:
     def __init__(self,coach):self.c=coach
 
     def execute(self,action,args):
+        if action.startswith('method_'):
+            return self.management_action(action,args)
         fields={'settings':{'expected_version','settings'},'grammar':{'expected_version','enabled','scope','session_id','item_id'},
                 'proposal':{'job_id','proposal_id','expected_version','accept'},'archive':{'source_id','expected_version'},
                 'restore':{'expected_version','source_version','part'},'reveal_homework':{'homework_id','expected_version'},
@@ -219,3 +271,25 @@ class AdminAction:
                 return self.c.memory.put(sd['key'],value,a['expected_coach_version'])
             return self.c.request(key,'admin_feedback',a,feedback)
         raise ValueError('Unknown domain action')
+
+    def management_action(self,action,args):
+        from .management import Management
+        fields={
+            'method_draft':{'expected_profile_version','expected_draft_version','data'},
+            'method_discard':{'expected_draft_version'},
+            'method_publish':{'expected_profile_version','expected_draft_version','mode'},
+            'method_trial_decision':{'expected_profile_version','expected_trial_version','keep'},
+            'method_restore':{'expected_profile_version','change_id'},
+            'method_feedback':{'expected_profile_version','kind','text'},
+            'method_feedback_review':{'expected_profile_version'},
+        }
+        if action not in fields or set(args)!=fields[action]|{'idempotency_key','learner_confirmed'} or args['learner_confirmed'] is not True:
+            raise ValueError('Explicit named methodology action required')
+        key=args['idempotency_key']
+        if not isinstance(key,str) or not 1<=len(key)<=128:raise ValueError('Invalid action key')
+        values={k:deepcopy(args[k]) for k in fields[action]}
+        for k,v in values.items():
+            if k.startswith('expected_') and (type(v) is not int or v<(0 if k=='expected_draft_version' else 1)):raise ValueError('Invalid version')
+        methods={'method_draft':'save_draft','method_discard':'discard','method_publish':'publish','method_trial_decision':'trial_decision',
+                 'method_restore':'restore','method_feedback':'feedback','method_feedback_review':'review_feedback'}
+        return getattr(Management(self.c),methods[action])(key=key,**values)
