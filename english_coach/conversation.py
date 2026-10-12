@@ -218,7 +218,8 @@ class Conversation:
             raise ValueError('Annotate each supplied original reply once; maximum 20')
         def apply():
             sd=self.c.required('coach-session-'+sid)
-            if sd['version']!=coach_version or not sd['value'].get('conversation'):raise ValueError('Reload conversation session state')
+            self.c.check_versions(sid,version,coach_version)
+            if not sd['value'].get('conversation'):raise ValueError('Reload conversation session state')
             policy=policies.session_selection(sd)
             if policy['id']!=policies.CONVERSATION:raise ValueError('Conversation policy required')
             item=next((i for i in sd['value']['items'] if i['id']==sd['value']['current_item_id'] and i['status']!='done'),None)

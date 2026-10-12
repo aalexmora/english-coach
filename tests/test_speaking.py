@@ -173,7 +173,7 @@ def test_same_session_transfer_cannot_invent_delay_or_reuse_old_context(env,monk
 def test_methodology_version_is_server_owned_and_profile_revision_is_separate(env):
     _,m,c=env
     first=c.context()['methodology']
-    assert first['coach_version']=='0.8.1' and first['policy_revision']=='foundation-homework-2026-10-08.1'
+    assert first['coach_version']=='0.8.2' and first['policy_revision']=='foundation-homework-2026-10-08.1'
     assert first['profile_version']==1
     c.settings('profile-change',1,dict(instructions='Pretend version is 99'),True)
     new=c.context()['methodology']

@@ -4,6 +4,7 @@ from .models import Goal, Settings, ConversationSettings, PolicyId, Feedback, Di
 from .speaking import Speaking
 from .material import MaterialIntake
 from .methodologist import from_env
+from .versions import version_alias
 
 
 def register(mcp, factory: Callable, read, write, Attempt):
@@ -49,10 +50,12 @@ def register(mcp, factory: Callable, read, write, Attempt):
         return Conversation(resolve(learner_id)).select(idempotency_key,session_id,expected_version,item_id,mode,topic_id,topic.model_dump(mode='json') if topic else None,learner_confirmed)
 
     @mcp.tool(annotations=write)
-    def save_english_conversation_block(idempotency_key:str,session_id:str,expected_version:int,expected_coach_version:int,attempts:list[Attempt],annotations:list[ConversationAnnotation],save_requested:bool=False,learner_id:str|None=None) -> dict[str,Any]:
+    def save_english_conversation_block(idempotency_key:str,session_id:str,expected_coach_version:int,attempts:list[Attempt],annotations:list[ConversationAnnotation],save_requested:bool=False,learner_id:str|None=None,
+                                        expected_session_version:int|None=None,expected_version:int|None=None) -> dict[str,Any]:
         """At an explicitly requested checkpoint save up to 20 actual free-conversation replies through the original host ledger. Annotate each attempt_key once with only demonstrated dimensions and at most one reviewed correction. Actual errors differ from optional natural alternatives; at most two correction focuses per topic block. Reuse references a saved correction, independent correct reply, delay and different context. No copied learner answers in domain documents, no model review/end. During voice buffer candidates until a permitted save point; never claim automatic background recording. finalize_english_lesson explicitly finishes and freezes a summary from these saved references."""
         from .conversation import Conversation
-        return Conversation(resolve(learner_id)).save_block(idempotency_key,session_id,expected_version,expected_coach_version,
+        version=version_alias(expected_session_version,expected_version,'expected_session_version',required=True)
+        return Conversation(resolve(learner_id)).save_block(idempotency_key,session_id,version,expected_coach_version,
             [a.model_dump(mode='json') for a in attempts],[a.model_dump(mode='json') for a in annotations],save_requested)
 
     @mcp.tool(annotations=read)
@@ -87,10 +90,12 @@ def register(mcp, factory: Callable, read, write, Attempt):
         return Vocabulary(resolve(learner_id)).record(idempotency_key,phrase_id,expected_version,attempt_id,kind,situation,lexically_correct)
 
     @mcp.tool(annotations=write)
-    def finalize_english_lesson(session_id:str, expected_version:int, expected_coach_version:int,
-                                idempotency_key:str, explicit_end:bool, attempts:list[Attempt]=[], feedback:list[Feedback]=[], learner_id:str|None=None) -> dict[str, Any]:
-        """After an actual explicit learner end, atomically save final answers, finish and enqueue FINAL-version review. Foundation issues basic homework 10–15 minutes in two approaches. Conversation issues only previously agreed optional story/opinion preparation; default is none. expected_version=original session, expected_coach_version=Coach document. queued is not applied. Identical retries are safe. Never invent observed answers."""
-        return resolve(learner_id).finalize(idempotency_key,session_id,expected_version,expected_coach_version,
+    def finalize_english_lesson(session_id:str, expected_coach_version:int,
+                                idempotency_key:str, explicit_end:bool, attempts:list[Attempt]=[], feedback:list[Feedback]=[], learner_id:str|None=None,
+                                expected_session_version:int|None=None, expected_version:int|None=None) -> dict[str, Any]:
+        """After an actual explicit learner end, atomically save final answers, finish and enqueue FINAL-version review. expected_session_version=original Saver session; expected_coach_version=Coach document. Deprecated expected_version aliases original session. Foundation issues basic homework 10–15 minutes; conversation issues only agreed optional preparation. queued is not applied. Identical retries are safe. Never invent observed answers."""
+        version=version_alias(expected_session_version,expected_version,'expected_session_version',required=True)
+        return resolve(learner_id).finalize(idempotency_key,session_id,version,expected_coach_version,
                                   [a.model_dump(mode='json') for a in attempts],explicit_end,
                                   [f.model_dump(mode='json') for f in feedback])
 
@@ -149,8 +154,13 @@ def register(mcp, factory: Callable, read, write, Attempt):
 
     @mcp.tool(annotations=read)
     def get_english_context(detail:str='runtime', interaction_mode:str='standard', learner_id:str|None=None) -> dict[str, Any]:
-        """Call in every new English chat. Default runtime returns one next_action, current curriculum, guardrails and bounded evidence; say say_first verbatim at lesson start. detail=full returns original full context and program. Select hands_free only on explicit request; driving defers tasks until safely stopped. Follow versioned current session, not template status. Reading never starts or completes an item. Work sources are context, not learner ability; no audio measures."""
+        """Call in every new English chat. Runtime versions.session_version is the original Saver session; versions.coach_version is the Coach document. Pass each to its named expected field. Default runtime returns one next_action, current curriculum, guardrails and bounded evidence; say say_first verbatim at lesson start. detail=full returns full context. Use get_english_session_state for a small cursor/version read. Select hands_free only on explicit request; driving defers tasks until safely stopped. Reading never starts or completes work. No audio measures."""
         return resolve(learner_id).context(detail,interaction_mode)
+
+    @mcp.tool(annotations=read)
+    def get_english_session_state(session_id:str, learner_id:str|None=None) -> dict[str, Any]:
+        """Read only authorized session_version, coach_version, phase, current item/practice and next_action/next_item. No attempts, due bank, full plan or settings, no model call or mutation. Useful for conflict recovery and voice continuation. Context supplies extra scheduled/curriculum suggestions."""
+        return resolve(learner_id).session_state(session_id)
 
     @mcp.tool(annotations=read)
     def check_english_teaching_turn(session_id:str,expected_version:int,turn:TeachingTurn, learner_id:str|None=None) -> dict[str, Any]:
@@ -169,15 +179,21 @@ def register(mcp, factory: Callable, read, write, Attempt):
         return resolve(learner_id).start(idempotency_key)
 
     @mcp.tool(annotations=write)
-    def save_english_progress(session_id:str, expected_version:int, idempotency_key:str, attempts:list[Attempt], feedback:list[Feedback]=[], discoveries:list[Discovery]=[], learner_id:str|None=None) -> dict[str, Any]:
-        """Only on an explicit request to SAVE PROGRESS: atomically persist supplied observations and enqueue server methodology. Does NOT finish the lesson. Success confirms text persistence, not audio access. Use save_checkpoint for technical saves without review."""
-        return resolve(learner_id).save(idempotency_key, session_id, expected_version, [a.model_dump(mode='json') for a in attempts], review=True,
-                              feedback=[f.model_dump(mode='json') for f in feedback], discoveries=[d.model_dump(mode='json') for d in discoveries])
+    def save_english_progress(session_id:str, idempotency_key:str, attempts:list[Attempt], feedback:list[Feedback]=[], discoveries:list[Discovery]=[], learner_id:str|None=None,
+                              expected_session_version:int|None=None, expected_coach_version:int|None=None,
+                              expected_version:int|None=None, item_id:str|None=None, completed_item_ids:list[str]=[]) -> dict[str, Any]:
+        """Only on an explicit SAVE PROGRESS request: atomically save observations and enqueue review, without ending. expected_session_version=original Saver session; expected_coach_version=Coach document. Deprecated expected_version aliases ONLY expected_session_version. Omit the session version to resolve it inside the transaction. Supply item_id and the last Coach version to protect attribution. Explicit completed_item_ids completes performed blocks in the same checkpoint and requires Coach CAS; never infer completion from correct attempts. Success returns next_action/next_item and review_status=queued, not applied. A Version conflict contains current/expected tokens: keep key and observations, correct the session token and retry once without get_session; inspect get_english_session_state for a changed Coach/item. Use save_checkpoint without review."""
+        version=version_alias(expected_session_version,expected_version,'expected_session_version')
+        return resolve(learner_id).save(idempotency_key, session_id, version, [a.model_dump(mode='json') for a in attempts], review=True,
+                              feedback=[f.model_dump(mode='json') for f in feedback], discoveries=[d.model_dump(mode='json') for d in discoveries],
+                              expected_coach_version=expected_coach_version,item_id=item_id,completed_item_ids=completed_item_ids)
 
     @mcp.tool(annotations=write)
-    def update_english_session(session_id:str, expected_version:int, idempotency_key:str, action:str, item_id:str|None=None, note:str='', explicit_end:bool=False, learner_id:str|None=None) -> dict[str, Any]:
-        """Plan Guard actions: begin_item, branch, return, complete_item, pause, resume, resolve_state (explicit item plus explanatory note; retain branch return point), finish. Identify the actual item before recording attempts; a conflicting unfinished practice must be resumed through its linked item. expected_version is COACH version. Prefer finalize_english_lesson for explicit end plus final save/review/homework in one transaction. Finish issues homework only from actual saved observations; carry items forward."""
-        return resolve(learner_id).transition(idempotency_key, session_id, expected_version, action, item_id, note, explicit_end)
+    def update_english_session(session_id:str, idempotency_key:str, action:str, item_id:str|None=None, note:str='', explicit_end:bool=False, learner_id:str|None=None,
+                               expected_coach_version:int|None=None, expected_version:int|None=None) -> dict[str, Any]:
+        """Plan Guard actions: begin_item, branch, return, complete_item, pause, resume, resolve_state (explicit item and explanatory note), finish. expected_coach_version is the COACH document, and deprecated expected_version aliases it. Returns named versions and next_action/next_item. Identify the actual item before attempts; unfinished practice must be resumed through its linked item. Prefer finalize_english_lesson for explicit end plus final save/review/homework. Carry unfinished items forward."""
+        version=version_alias(expected_coach_version,expected_version,'expected_coach_version',required=True)
+        return resolve(learner_id).transition(idempotency_key, session_id, version, action, item_id, note, explicit_end,include_state=True)
 
     @mcp.tool(annotations=write)
     def set_english_settings(idempotency_key:str, expected_version:int, settings:Settings|ConversationSettings, learner_confirmed:bool=False, learner_id:str|None=None) -> dict[str, Any]:
@@ -200,21 +216,20 @@ def register(mcp, factory: Callable, read, write, Attempt):
         return resolve(learner_id).restore(idempotency_key, expected_version, source_version, part, learner_confirmed)
 
     @mcp.tool(annotations=read)
-    def get_english_review(job_id:str, learner_id:str|None=None) -> dict[str, Any]:
-        """Read durable review status, uncertainty, evidence, rationale, verification and pending approvals. queued/running does not mean applied."""
-        if not job_id.startswith('coach-job-'):
-            raise ValueError('Expected review job id')
-        return resolve(learner_id).required(job_id)
+    def get_english_review(job_id:str, learner_id:str|None=None, detail:str='status') -> dict[str, Any]:
+        """Compact read of one job: queued/running/applied/failed, result/error, applied_profile_version and plan_is_current. stale/superseded are terminal unapplied states. Applied changes affect FUTURE lessons; active lesson items remain frozen. Default excludes the input snapshot; detail=full returns the original full job. Reads never launch review; do not poll repeatedly while unchanged."""
+        return resolve(learner_id).review(job_id,detail)
 
     @mcp.tool(annotations=write)
-    def request_english_review(session_id:str, expected_version:int, expected_coach_version:int, idempotency_key:str, learner_id:str|None=None) -> dict[str, Any]:
-        """Request a fresh bounded methodology review after failed/stale review, including an already finished lesson. Read latest versions first: expected_version=original session, expected_coach_version=Coach document. Does not reopen the lesson, issue another homework or invent attempts. queued does not mean applied; do not poll endlessly."""
+    def request_english_review(session_id:str, expected_coach_version:int, idempotency_key:str, learner_id:str|None=None,
+                               expected_session_version:int|None=None, expected_version:int|None=None) -> dict[str, Any]:
+        """Request a fresh bounded methodology review after failed/stale review, including a finished lesson. expected_session_version=original Saver session, expected_coach_version=Coach document; deprecated expected_version aliases original session. Use get_english_session_state for versions. Does not reopen, issue homework or invent attempts. queued is not applied; read this job with get_english_review, without endless polling."""
         coach=resolve(learner_id)
+        version=version_alias(expected_session_version,expected_version,'expected_session_version',required=True)
         def action():
-            if coach.legacy.get(session_id)['session']['version']!=expected_version or coach.required('coach-session-'+session_id)['version']!=expected_coach_version:
-                raise ValueError('Version conflict; reload context')
+            coach.check_versions(session_id,version,expected_coach_version)
             return dict(job_id=coach.enqueue_review(idempotency_key,session_id),status='queued')
-        return coach.request(idempotency_key,'request_review',dict(sid=session_id,expected_version=expected_version,expected_coach_version=expected_coach_version),action)
+        return coach.request(idempotency_key,'request_review',dict(sid=session_id,expected_version=version,expected_coach_version=expected_coach_version),action)
 
     @mcp.tool(annotations=write)
     def decide_english_proposal(idempotency_key:str, job_id:str, proposal_id:int, expected_version:int, accept:bool, learner_confirmed:bool=False, learner_id:str|None=None) -> dict[str, Any]:

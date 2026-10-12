@@ -84,6 +84,8 @@ def lesson_runtime(ctx, mode='standard'):
         action=dict(kind='start_or_resume',prompt=None,why='Start/resume the authoritative lesson before recording work')
     elif sv['phase']=='paused':
         action=dict(kind='await_resume',prompt=None,why='Wait for the learner to resume')
+    elif sv['phase']=='finished':
+        action=dict(kind='await_start',prompt=None,why='The lesson is finished; start the next lesson only on request')
     elif sv['phase']=='branch' and not active:
         action=dict(kind='continue_branch',prompt=(sv.get('branch') or {}).get('note'),why='Continue the explicit branch',return_to=(sv.get('branch') or {}).get('return_to'))
     elif active:
@@ -163,7 +165,8 @@ def lesson_runtime(ctx, mode='standard'):
                                    next_verification_targets=(ctx.get('conversation') or {}).get('next_conversation',{}).get('verification_targets',[]),
                                    data_mode='text_conversation',instruction='Take two or three comfortable topics for initial conversation; adapt the provisional route using original replies. No grammar diagnostic worksheet. Only confirmed goal/load are saved.') if conversation_state else None),
                 grammar_permissions=sv.get('grammar_permissions',{}),interaction_mode=mode,
-                versions=dict(profile=p['version'],session=session['version'] if session else None,
+                versions=dict(profile=p['version'],session_version=ctx.get('session_version'),
+                              coach_version=session['version'] if session else None,
                               course_program=ctx.get('course_program',{}).get('version') if ctx.get('course_program') else None),
                 session_id=sv.get('session_id'),phase=sv.get('phase'),
                 state_authority=dict(current='session items',future_template='profile plan',
@@ -220,6 +223,6 @@ def check_turn(coach, sid, expected_version, turn):
         elif normalize(turn['learner_answer'])==normalize(turn['proposed_answer']):
             issues.append('identical_answer_is_not_correction')
         if turn.get('unfinished_answer'): issues.append('clarify_unfinished_meaning_first')
-    return dict(allowed=not issues,violations=issues,session_version=sd['version'],teaching_policy=policy,
+    return dict(allowed=not issues,violations=issues,coach_version=sd['version'],teaching_policy=policy,
                 semantic_review_required=turn['meaning_preserved']=='unknown',
                 scope='Checks supplied structured flags and saved evidence only; cannot inspect unsubmitted speech or verify the flags themselves')

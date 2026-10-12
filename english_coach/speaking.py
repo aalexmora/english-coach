@@ -180,8 +180,7 @@ class Speaking:
             natural=policy['id']==policies.CONVERSATION and (v['mode']=='conversation' or not policy['grammar_exercises'])
             if natural and action in ('help','coach','repeat_task'):
                 raise ValueError('Continue the dialogue with brief correction; drill cycles require an explicitly permitted block')
-            if self.c.legacy.get(sid)['session']['version']!=session_version:
-                raise ValueError('Session version conflict')
+            self.c.check_versions(sid,expected_session_version=session_version)
             stage=v['stage']
             if stage=='completed':
                 raise ValueError('Practice already completed')

@@ -7,7 +7,7 @@ Obsidian English backlog, IDEA-004 with links to IDEA-001/002.
 ## Published cabinet
 
 Cabinet: https://eng.moras.keenetic.pro (redirects to `/english`).
-Release: Coach **0.8.1**, UI **0.3.1**, teaching policies **1.0.0**.
+Release: Coach **0.8.2**, UI **0.3.1**, teaching policies **1.0.0**.
 The owner leaves the login field empty and uses the existing private Saver code.
 Family members use their personal login/code. Codes are never included in Git.
 
@@ -179,6 +179,37 @@ image. Deployment and model integration were checked separately; real teaching
 acceptance remains open in IDEA-004.
 
 ## Local enablement
+
+Coach **0.8.2** fixes the Voice version contract. Runtime and save receipts
+return `session_version` for the original Saver session and `coach_version` for
+the Coach document. `save_english_progress` and `save_checkpoint` accept
+`expected_session_version` and optional `expected_coach_version`; omitting the
+original session token resolves it inside the save transaction. Plan Guard uses
+`expected_coach_version`. The deprecated `expected_version` input remains an alias
+of the version historically used by that tool; contradictory aliases fail.
+
+A failed CAS returns a compact `Version conflict` JSON payload with the object,
+expected/current versions, saved position and retry fields. The failed command
+commits nothing: retry once with the same idempotency key and observations after
+correcting the session token. Changed Coach state needs inspection before retry.
+`get_english_session_state` reads named versions and the saved cursor without
+loading original observations or the full lesson plan. Save receipts include
+`next_action` / `next_item`; optional explicit `completed_item_ids` atomically
+advance performed blocks and require Coach CAS. Saving answers alone never
+completes an item. The full context adds scheduled and curriculum suggestions.
+
+`get_english_review(job_id)` now excludes the input snapshot by default and reports
+status, result/error, applied profile version and whether that version remains
+current. `detail="full"` retains the full job read. `queued` / `running` are
+pending; `failed` / `stale` / `superseded` did not apply a plan. Applied reviews
+update the future template while retaining the active lesson. This release
+requires the sibling host's public `LegacyEnglishAPI.metadata` and updated MCP
+checkpoint adapter. Production rollout on 2026-10-12 passed candidate MCP checks,
+HTTPS/OAuth and scope isolation, a 59-tool public catalog and live cursor/review
+reads. Original 347 observations and 13 sessions matched before/after; verified
+backup and the 0.8.1 rollback image remain on the host. The ChatGPT English Coach
+catalog was refreshed to 39 write / 20 read tools. A new real Voice lesson is a
+separate acceptance check.
 
 Use the existing sibling `mcp-gpt-saver` environment. From that project:
 

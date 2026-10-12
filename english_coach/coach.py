@@ -9,6 +9,7 @@ from .speaking import project as speaking_projection, HELP
 from .teaching import METHODS, lesson_brief, work_context, work_patterns
 from . import __version__, POLICY_REVISION
 from . import policies
+from .versions import VersionConflict
 
 
 def now():
@@ -114,6 +115,10 @@ class Coach:
         return result
 
     def context(self, detail='full', interaction_mode='standard'):
+        with self.memory.atomic():
+            return self._context(detail, interaction_mode)
+
+    def _context(self, detail='full', interaction_mode='standard'):
         if detail not in ('full','runtime'): raise ValueError('Unknown context detail')
         if detail=='runtime':
             from .runtime import compact
@@ -161,6 +166,8 @@ class Coach:
         from .vocabulary import Vocabulary
         from .conversation import Conversation
         return dict(learner_id=self.learner_id, say_first=opening, configured=True, methodology=methodology,
+                    session_version=active[0]['version'] if active else None,
+                    coach_version=session['version'] if session else None,
                     conversation=Conversation(self).get() if p['value'].get('conversation') else None,
                     homework=Homework(self).get(), vocabulary=Vocabulary(self).context(policy),
                     methodologist_health=health(self.documents('coach-job-')),
@@ -225,7 +232,8 @@ class Coach:
             current = self.memory.get('coach-session-'+s['id'])
             if current:
                 return dict(say_first=self.opening_line(p),
-                            session=self.get_session(s['id'])['session'], coach=current)
+                            session=self.get_session(s['id'])['session'], coach=current,
+                            **self.session_state(s['id']))
             carry = self.memory.get('coach-carry')
             items = deepcopy(carry['value']['items'] if carry else [])
             latest = {i['id']:i for i in p['value']['plan']}
@@ -255,7 +263,8 @@ class Coach:
             if carry:
                 self.memory.put('coach-carry', dict(items=[]), carry['version'])
             return dict(say_first=self.opening_line(p),
-                        session=self.get_session(s['id'])['session'], coach=doc)
+                        session=self.get_session(s['id'])['session'], coach=doc,
+                        **self.session_state(s['id']))
         return self.request(key, 'start', {}, action)
 
     def get_session(self, sid):
@@ -264,21 +273,109 @@ class Coach:
         if result['coach']:
             result['session']['plan'] = result['coach']['value']['items']
             result['session']['plan_authority'] = 'english-coach'
+        result.update(session_version=result['session']['version'],
+                      coach_version=result['coach']['version'] if result['coach'] else None)
         return result
 
-    def save(self, key, sid, expected_version, attempts, review=False, feedback=None, discoveries=None):
+    def version_state(self, sid):
+        original = self.legacy.metadata(sid)
+        sd = self.required('coach-session-'+sid)
+        return dict(session_id=sid, session_version=original['version'], coach_version=sd['version'],
+                    session_status=original['status'], phase=sd['value']['phase'],
+                    current_item_id=sd['value'].get('current_item_id'),
+                    current_practice_id=sd['value'].get('current_practice_id'))
+
+    def check_versions(self, sid, expected_session_version=None, expected_coach_version=None):
+        state = self.version_state(sid)
+        # Never rebase a stale Coach decision onto a changed active item.
+        for target, expected in (('coach', expected_coach_version), ('session', expected_session_version)):
+            if expected is not None and expected != state[target+'_version']:
+                raise VersionConflict(target, expected, state)
+        return state
+
+    def session_state(self, sid):
+        """Small read-only cursor, using public metadata and saved domain state."""
+        from .runtime import lesson_runtime
+        with self.memory.atomic():
+            state = self.version_state(sid)
+            sd = self.required('coach-session-'+sid)
+            p = self.profile()
+            practices = [d for d in self.documents('coach-practice-')
+                         if d['value']['stage'] != 'completed']
+            ctx = dict(profile=p, session=sd, unfinished=[], legacy_sessions=[],
+                       session_version=state['session_version'],
+                       speaking=dict(open_practices=practices, queue=[], patterns=[]),
+                       current_practice_exists=bool(self.memory.get(state['current_practice_id']))
+                       if state['current_practice_id'] else None, lesson_brief=[])
+            action = lesson_runtime(ctx)['next_action']
+            item = next((i for i in sd['value']['items'] if i['id']==action.get('item_id')), None)
+            return dict(**state, next_action=action,
+                        next_item={k:item[k] for k in ('id','skill_id','task','status')} if item else None,
+                        cursor_scope='Saved lesson/practice position; context adds scheduled and curriculum suggestions')
+
+    def review(self, job_id, detail='status'):
+        if not job_id.startswith('coach-job-') or detail not in ('status','full'):
+            raise ValueError('Expected review job id and detail=status/full')
+        with self.memory.atomic():
+            doc = self.required(job_id)
+            if detail == 'full':
+                return doc
+            value = {k:v for k,v in doc['value'].items() if k not in ('snapshot','lease_token')}
+            profile = self.profile()
+            applied = value['status']=='applied'
+            return dict(**{k:v for k,v in doc.items() if k!='value'}, value=value,
+                        job_id=doc['key'], status=value['status'], applied=applied,
+                        applied_profile_version=value.get('applied_profile_version'),
+                        current_profile_version=profile['version'],
+                        plan_is_current=applied and profile['version']==value.get('applied_profile_version'),
+                        plan_scope='Future lessons; the active lesson retains its saved items',
+                        terminal=value['status'] not in ('queued','running'),
+                        result=value.get('result'), error=value.get('error'))
+
+    def complete_items(self, sid, value, item_ids):
+        if len(item_ids)>12 or len(set(item_ids))!=len(item_ids):
+            raise ValueError('Expected at most 12 unique completed item IDs')
+        for item_id in item_ids:
+            if value['phase']!='active':
+                raise ValueError('Return from the branch before completing an item')
+            if any(d['value']['current_session_id']==sid and d['value']['item_id']==item_id
+                   and d['value']['stage'] in ('repair','reproduce','task_retry')
+                   for d in self.documents('coach-practice-')):
+                raise ValueError('Finish the learner repair/reproduction before completing this item')
+            item = next((i for i in value['items'] if i['id']==item_id and i['status']!='done'), None)
+            if item is None:
+                raise ValueError('Unknown or completed item')
+            item['status']='done'
+            if value.get('current_item_id')==item_id:
+                value['current_item_id']=None
+            practice = self.memory.get(value['current_practice_id']) if value.get('current_practice_id') else None
+            if practice and practice['value']['item_id']==item_id and practice['value']['stage']=='completed':
+                value['current_practice_id']=None
+
+    def save(self, key, sid, expected_version, attempts, review=False, feedback=None, discoveries=None,
+             expected_coach_version=None, item_id=None, completed_item_ids=None):
         feedback = [dump(Feedback.model_validate(f)) for f in (feedback or [])]
         discoveries = [dump(Discovery.model_validate(d)) for d in (discoveries or [])]
         if len(feedback)>20 or len(discoveries)>20:
             raise ValueError('Maximum 20 feedback/discovery items per save')
         args = dict(sid=sid, expected_version=expected_version, attempts=attempts, review=review, feedback=feedback, discoveries=discoveries)
+        completed_item_ids = completed_item_ids or []
+        # Preserve the original idempotency payload for compatible old clients.
+        if expected_coach_version is not None: args['expected_coach_version']=expected_coach_version
+        if item_id is not None: args['item_id']=item_id
+        if completed_item_ids: args['completed_item_ids']=completed_item_ids
         def action():
+            state = self.check_versions(sid, expected_version, expected_coach_version)
             p = self.profile()
             sd = self.required('coach-session-'+sid)
             if sd['value']['phase'] not in ('active','branch'):
                 raise ValueError('Resume the lesson before saving progress')
+            if item_id is not None and item_id != state['current_item_id']:
+                raise ValueError('Checkpoint item differs from the saved current item; read get_english_session_state')
+            if completed_item_ids and expected_coach_version is None:
+                raise ValueError('Completing items requires expected_coach_version')
             previous_ids={a['id'] for a in self.legacy.get(sid)['attempts']}
-            saved = self.legacy.checkpoint(key_for(key,'checkpoint'), sid, expected_version, attempts)
+            saved = self.legacy.checkpoint(key_for(key,'checkpoint'), sid, state['session_version'], attempts)
             current = self.legacy.get(sid)
             evidence = {a['id'] for a in current['attempts']}
             v = deepcopy(sd['value'])
@@ -316,11 +413,14 @@ class Coach:
                     if fresh:
                         v['usages'].append(dict(item_id=item['id'], mechanic=item['mechanic'], version=item['mechanic_version'],
                                             settings=deepcopy(v['settings_snapshot']), attempt_ids=fresh, at=now()))
+            self.complete_items(sid, v, completed_item_ids)
             sd = self.memory.put(sd['key'], v, sd['version'])
             job_id = None
             if review:
                 job_id = self.enqueue_review(key, sid)
-            return dict(**saved, session_status=current['session']['status'], coach_version=sd['version'], review_job=job_id)
+            return dict(**saved, saved=True, **self.session_state(sid), review_job=job_id,
+                        review_status='queued' if job_id else None, review_applied=False,
+                        review_read_tool='get_english_review' if job_id else None)
         return self.request(key, 'save', args, action)
 
     def enqueue_review(self, key, sid):
@@ -382,14 +482,13 @@ class Coach:
                                     snapshot=snapshot, created_at=now(), result=None, error=None), 0)
         return job_id
 
-    def transition(self, key, sid, expected_version, action, item_id=None, note='', explicit_end=False):
+    def transition(self, key, sid, expected_version, action, item_id=None, note='', explicit_end=False, include_state=False):
         args = dict(sid=sid, expected_version=expected_version, action=action, item_id=item_id, note=note, explicit_end=explicit_end)
         if len(note)>1500:
             raise ValueError('Note too long')
         def apply():
             sd = self.required('coach-session-'+sid)
-            if sd['version'] != expected_version:
-                raise ValueError('Version conflict')
+            self.check_versions(sid, expected_coach_version=expected_version)
             v = deepcopy(sd['value'])
             legacy = self.legacy.get(sid)['session']
             if legacy['status']!='active':
@@ -418,14 +517,7 @@ class Coach:
                         v['current_practice_id']=None
                 v['current_item_id']=item_id
             elif action=='complete_item' and phase=='active':
-                if any(d['value']['current_session_id']==sid and d['value']['item_id']==item_id and d['value']['stage'] in ('repair','reproduce','task_retry') for d in self.documents('coach-practice-')):
-                    raise ValueError('Finish the learner repair/reproduction before completing this item')
-                item = next((i for i in v['items'] if i['id']==item_id), None)
-                if item is None or item['status']=='done':
-                    raise ValueError('Unknown or completed item')
-                item['status']='done'
-                if v.get('current_item_id')==item_id:
-                    v['current_item_id']=None
+                self.complete_items(sid, v, [item_id])
             elif action=='finish':
                 left = [dict(i, status='carried') for i in v['items'] if i['status']!='done']
                 if not explicit_end:
@@ -455,6 +547,8 @@ class Coach:
                         value.update(status='superseded',error='Lesson finalized; replaced by a final-version review',lease_until=None)
                         self.memory.put(j['key'],value,j['version'])
                     result['review_job'] = self.enqueue_review(key_for(key,'final'),sid)
+            if include_state:
+                result.update(self.session_state(sid))
             return result
         return self.request(key, 'transition', args, apply)
 
@@ -462,12 +556,13 @@ class Coach:
         if not explicit_end:
             raise ValueError('An explicit learner end is required')
         def action():
-            if self.required('coach-session-'+sid)['version']!=expected_coach_version:
-                raise ValueError('Version conflict')
+            self.check_versions(sid, expected_version, expected_coach_version)
             saved = self.save(key_for(key,'save'),sid,expected_version,attempts,feedback=feedback)
-            finished = self.transition(key_for(key,'end'),sid,saved['coach_version'],'finish',explicit_end=True)
+            finished = self.transition(key_for(key,'end'),sid,saved['coach_version'],'finish',explicit_end=True,include_state=True)
             job = finished.get('review_job') or self.enqueue_review(key_for(key,'final'),sid)
             return dict(saved=True,finished=True,session_id=sid,coach_version=finished['version'],
+                        session_version=self.legacy.metadata(sid)['version'],
+                        next_action=finished['next_action'],next_item=finished['next_item'],
                         conversation_summary=finished.get('conversation_summary'),
                         review_job=job,review_status='queued',homework=finished.get('homework'),
                         takeaway='Полезнее одна короткая самостоятельная реплика позже, чем много повторов сразу.')
