@@ -28,12 +28,12 @@ def test_readiness_blocks_future_lesson_until_review_is_applied(env):
     assert coach.start('same-active')['session']['id'] == sid
     coach.transition('finish-current', sid, coach.required('coach-session-'+sid)['version'],
                      'finish', explicit_end=True)
-    blocked = coach.start('next')
+    blocked = coach.start('next', require_review=True)
     assert blocked['started'] is False
     assert blocked['status'] == 'queued'
     assert coach.legacy.progress()['active_sessions'] == []
     assert coach.start('next') == blocked
-    resumed = coach.start('next', accept_outdated=True,
+    resumed = coach.start('next', accept_outdated=True, require_review=True,
                           expected_plan_etag=blocked['plan_etag'])
     assert resumed['session']['id'] != sid
 
