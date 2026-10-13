@@ -616,7 +616,8 @@ class Worker:
             j['offline_takeaway']='Повтор после подсказки полезен для тренировки. Самостоятельный ответ в новой ситуации позже — отдельная проверка.'
             from .management import Management
             Management(self.coach).answer_feedback(result.get('methodology_responses',[]),current['key'])
-            j.update(status='applied', result=result, proposals=pending, applied_profile_version=applied['version'], lease_until=None, error=None)
+            j.update(status='applied', result=result, proposals=pending, applied_profile_version=applied['version'],
+                     applied_plan_etag=self.coach.plan_etag(applied), lease_until=None, error=None)
             return self.memory.put(current['key'], j, current['version'])
 
     async def run_once(self):
