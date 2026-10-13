@@ -7,7 +7,7 @@ from .methodologist import from_env
 from .versions import version_alias
 
 
-def register(mcp, factory: Callable, read, write, Attempt):
+def register(mcp, factory: Callable, read, write, Attempt, submit_material_async=None):
     def resolve(learner_id):
         # The host authorizes selection before constructing both public APIs.
         return factory() if learner_id is None else factory(learner_id)
@@ -130,6 +130,8 @@ def register(mcp, factory: Callable, read, write, Attempt):
     @mcp.tool(annotations=write)
     async def submit_english_material(idempotency_key:str, text:str, context:str='', learner_id:str|None=None) -> dict[str, Any]:
         """On the learner's explicit request, analyze an occasional work dialogue in one call. The methodologist saves a bounded work-context analysis, selected fragments and grounded speaking exercises automatically; no card-selection step or active lesson is needed. The full input goes to the configured external provider when COACH_PROVIDER=http, but is not stored in Coach. Work dialogue is context, never observed learner performance. Identical retries use the same key and arguments."""
+        if submit_material_async is not None:
+            return submit_material_async(idempotency_key,text,context,learner_id)
         coach = resolve(learner_id)
         provider, timeout = from_env()
         return await MaterialIntake(coach, provider, timeout).submit(idempotency_key, text, context)
