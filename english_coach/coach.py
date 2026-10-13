@@ -256,7 +256,7 @@ class Coach:
                             'check_job' if status in ('queued', 'running') else
                             'retry_or_explicit_old_plan' if blocked else 'start'))
 
-    def start(self, key, accept_outdated=False, expected_plan_etag=None):
+    def start(self, key, accept_outdated=False, expected_plan_etag=None, require_review=False):
         def action():
             p = self.profile()
             old_active = self.legacy.progress()['active_sessions']
@@ -264,7 +264,7 @@ class Coach:
                 readiness = self.lesson_readiness()
                 if expected_plan_etag is not None and expected_plan_etag != readiness['plan_etag']:
                     raise ValueError('Plan version conflict; refresh lesson readiness')
-                if not readiness['lesson_ready'] and not accept_outdated:
+                if require_review and not readiness['lesson_ready'] and not accept_outdated:
                     return dict(started=False, **readiness)
             s = self.legacy.start(key_for(key,'start'), p['value']['goal']['outcome'], [])
             current = self.memory.get('coach-session-'+s['id'])
@@ -318,10 +318,10 @@ class Coach:
         with self.memory.atomic():
             if not self.legacy.progress()['active_sessions']:
                 readiness = self.lesson_readiness()
-                if not readiness['lesson_ready'] and not accept_outdated:
+                if require_review and not readiness['lesson_ready'] and not accept_outdated:
                     return dict(started=False, **readiness)
             return self.request(key, 'start',
-                                dict(accept_outdated=accept_outdated, expected_plan_etag=expected_plan_etag),
+                                dict(accept_outdated=accept_outdated, expected_plan_etag=expected_plan_etag, require_review=require_review),
                                 action)
 
     def get_session(self, sid):
