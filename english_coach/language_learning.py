@@ -108,7 +108,7 @@ class LanguageLearning:
         active=self.memory.get('language-active')
         job=self.latest_job()
         status=job['value']['status'] if job else 'none'
-        blocked=status in ('queued','running','failed','stale') or program is None
+        blocked=status in ('queued','running','failed','stale','proposed','rejected') or program is None
         return dict(profile_id=self.learner_id,language=self.language,
                     status=status,job_id=job['key'] if job else None,
                     plan_version=program['version'] if program else None,
@@ -267,7 +267,7 @@ class LanguageLearning:
             return dict(job_id=claim['key'],status='failed_or_retry')
         with self.memory.atomic():
             current=self.memory.get(claim['key'])
-            if not current or current['value'].get('lease',{}).get('id')!=v['lease']['id']:
+            if not current or (current['value'].get('lease') or {}).get('id')!=v['lease']['id']:
                 return dict(job_id=claim['key'],status='lease_lost')
             goal=self.memory.get('language-goal')
             program=self.memory.get('language-program')
@@ -281,10 +281,14 @@ class LanguageLearning:
                            lease=None,updated_at=clock())
             else:
                 if v['kind']=='initial_plan':
-                    value=dict(language=self.language,steps=result['steps'],
-                               next_step_id=result['steps'][0]['id'],
-                               rationale=result['rationale'],decision_job=claim['key'])
-                    self.memory.put('language-program',value,program['version'] if program else 0)
+                    previous=self.memory.get('language-proposal')
+                    self.memory.put('language-proposal',dict(
+                        plan=result,goal_version=goal['version'],
+                        program_version=program['version'] if program else 0,
+                        review_job=claim['key'],created_at=clock()),
+                        previous['version'] if previous else 0)
+                    final=dict(current['value'],status='proposed',result=result,error=None,
+                               lease=None,updated_at=clock())
                 else:
                     p=deepcopy(program['value'])
                     step=next(s for s in p['steps'] if s['id']==result['next_step_id'])
@@ -297,10 +301,40 @@ class LanguageLearning:
                         job_id=claim['key'],summary=result['summary'],
                         rationale=result['rationale'],learning_findings=result['learning_findings']),
                         notes['version'] if notes else 0)
-                final=dict(current['value'],status='applied',result=result,error=None,
-                           lease=None,updated_at=clock())
+                    final=dict(current['value'],status='applied',result=result,error=None,
+                               lease=None,updated_at=clock())
             self.memory.put(claim['key'],final,current['version'])
             return dict(job_id=claim['key'],status=final['status'])
+
+    def approve_plan(self,key,expected_proposal_version,approved=False):
+        """Only an explicit learner decision can apply an initial plan proposal."""
+        def action():
+            proposal=self.required('language-proposal')
+            if proposal['version']!=expected_proposal_version:
+                raise ValueError('Plan proposal version conflict')
+            v=proposal['value']
+            goal=self.required('language-goal')
+            previous=self.memory.get('language-program')
+            if goal['version']!=v['goal_version'] or (previous['version'] if previous else 0)!=v['program_version']:
+                raise ValueError('Proposal became stale; request another plan')
+            job=self.required(v['review_job'])
+            if job['value']['status']!='proposed':
+                raise ValueError('Proposal is no longer active')
+            if not approved:
+                self.memory.put(job['key'],dict(job['value'],status='rejected'),job['version'])
+                return dict(approved=False,status='rejected',job_id=job['key'])
+            plan=v['plan']
+            program=dict(language=self.language,steps=plan['steps'],
+                         next_step_id=plan['steps'][0]['id'],
+                         rationale=plan['rationale'],decision_job=job['key'])
+            saved=self.memory.put('language-program',program,previous['version'] if previous else 0)
+            self.memory.put(job['key'],dict(job['value'],status='applied',
+                            applied_plan_version=saved['version']),job['version'])
+            return dict(approved=True,status='applied',job_id=job['key'],
+                        plan_version=saved['version'])
+        return self.memory.request(key,dict(op='approve-language-plan',
+                           expected_proposal_version=expected_proposal_version,
+                           approved=approved),action)
 
     def job(self,job_id):
         doc=self.required(job_id)
@@ -308,4 +342,4 @@ class LanguageLearning:
         v=doc['value']
         return dict(job_id=job_id,status=v['status'],error=v.get('error'),
                     kind=v['kind'],attempts=v['attempts'],version=doc['version'],
-                    result=v.get('result') if v['status']=='applied' else None)
+                    result=v.get('result') if v['status'] in ('applied','proposed') else None)
