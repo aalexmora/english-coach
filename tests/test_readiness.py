@@ -1,7 +1,20 @@
 """Lesson readiness invariants: queue, retry, outdated override and plan identity."""
-import asyncio
-from tests.test_coach import env, goal
-from english_coach.methodologist import Worker, TestProvider
+import pytest
+from saver.store import Store
+from saver.memory import MemoryAPI
+from saver.legacy_english import LegacyEnglishAPI
+from english_coach.coach import Coach
+
+
+@pytest.fixture
+def env(tmp_path):
+    store = Store(tmp_path/'memory.sqlite', tmp_path/'exports')
+    coach = Coach(MemoryAPI(store,'owner','english',['english']),
+                  LegacyEnglishAPI(store,'owner',['english']))
+    goal = dict(outcome='Work communication', minutes=20, milestones=['Ask', 'Discuss'],
+                skills=[dict(id='clarify',outcome='Ask about work',pattern_ids=['past_simple_questions'])])
+    coach.configure('init-readiness',goal,confirmed=True)
+    return store, None, coach
 
 
 def test_readiness_blocks_future_lesson_until_review_is_applied(env):
