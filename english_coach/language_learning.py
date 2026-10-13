@@ -258,7 +258,7 @@ class LanguageLearning:
         except Exception as exc:
             with self.memory.atomic():
                 current=self.memory.get(claim['key'])
-                if current and current['value'].get('lease',{}).get('id')==v['lease']['id']:
+                if current and (current['value'].get('lease') or {}).get('id')==v['lease']['id']:
                     terminal=current['value']['attempts']>=3
                     self.memory.put(claim['key'],dict(current['value'],
                         status='failed' if terminal else 'queued',
