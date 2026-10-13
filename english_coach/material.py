@@ -54,8 +54,9 @@ def source_coverage(text, result):
 
 
 class MaterialIntake:
-    def __init__(self, coach, provider, timeout):
+    def __init__(self, coach, provider, timeout, authorized=None):
         self.coach, self.provider, self.timeout = coach, provider, timeout
+        self.authorized = authorized
 
     async def submit(self, idempotency_key, text, context=''):
         if not isinstance(idempotency_key, str) or not 1 <= len(idempotency_key) <= 128:
@@ -160,6 +161,8 @@ class MaterialIntake:
             raise ValueError('Invalid material result') from None
 
         def save():
+            if self.authorized is not None and not self.authorized():
+                raise ValueError('Material access or worker lease revoked')
             if self.coach.profile()['version'] != profile['version']:
                 raise ValueError('Profile changed during analysis; retry with a new key')
             saved, existing, seen = [], 0, set()

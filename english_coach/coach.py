@@ -243,6 +243,18 @@ class Coach:
         etag = self.plan_etag(p)
         applied_etag = (latest['value'].get('applied_plan_etag') if latest else None)
         if status == 'applied' and applied_etag is None:
+            applied_version = latest['value'].get('applied_profile_version')
+            offset = 0
+            while applied_version is not None:
+                history = self.memory.history('coach-profile', 50, offset)
+                previous = next((h for h in history if h['version'] == applied_version), None)
+                if previous:
+                    applied_etag = self.plan_etag(previous)
+                    break
+                if len(history) < 50:
+                    break
+                offset += 50
+        if status == 'applied' and applied_etag is None:
             current = latest['value'].get('applied_profile_version') == p['version']
         else:
             current = (applied_etag == etag) if status == 'applied' else None
@@ -260,6 +272,7 @@ class Coach:
         def action():
             p = self.profile()
             old_active = self.legacy.progress()['active_sessions']
+            readiness = self.lesson_readiness()
             if not old_active:
                 readiness = self.lesson_readiness()
                 if expected_plan_etag is not None and expected_plan_etag != readiness['plan_etag']:
@@ -295,6 +308,8 @@ class Coach:
                 items=[dict(i,mechanic=effective['settings']['preferred_mechanic'],mechanic_version=1) for i in items]
             for item in items: policies.check_activity(policy,item['mechanic'],item['task'],item.get('activity','communicative'))
             v = dict(teaching_policy=policy,grammar_permissions={},learner_id=self.learner_id, session_id=s['id'], phase='active', items=items, branch=None, profile_version=p['version'],
+                     plan_status_at_start='current' if readiness['lesson_ready'] else 'previous',
+                     review_status_at_start=readiness['status'],
                      settings_snapshot=deepcopy(effective['settings']),goal_snapshot=deepcopy(effective['goal']),
                      instruction_snapshot=contract(policy,effective['settings']),method_trial_id=trial['value']['id'] if trial else None,
                      current_item_id=None, usages=[], feedback=[],
@@ -311,6 +326,8 @@ class Coach:
             if carry:
                 self.memory.put('coach-carry', dict(items=[]), carry['version'])
             return dict(say_first=self.opening_line(p),
+                        plan_status=v['plan_status_at_start'],
+                        outdated=v['plan_status_at_start']=='previous',
                         session=self.get_session(s['id'])['session'], coach=doc,
                         **self.session_state(s['id']))
         # A blocked readiness check must not cache a permanent result under the start key.

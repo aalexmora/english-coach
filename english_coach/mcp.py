@@ -129,7 +129,7 @@ def register(mcp, factory: Callable, read, write, Attempt, submit_material_async
 
     @mcp.tool(annotations=write)
     async def submit_english_material(idempotency_key:str, text:str, context:str='', learner_id:str|None=None) -> dict[str, Any]:
-        """On the learner's explicit request, analyze an occasional work dialogue in one call. The methodologist saves a bounded work-context analysis, selected fragments and grounded speaking exercises automatically; no card-selection step or active lesson is needed. The full input goes to the configured external provider when COACH_PROVIDER=http, but is not stored in Coach. Work dialogue is context, never observed learner performance. Identical retries use the same key and arguments."""
+        """Durably queue an explicitly submitted work dialogue and return job_id with actual status immediately. Read get_learning_material_job(job_id) separately; queued means received, running means processing, applied means selected results saved. The private source is temporarily retained by the host, excluded from normal exports/backups and removed after processing or expiry. Work dialogue is context, never learner performance. Identical retries use the same key and arguments."""
         if submit_material_async is not None:
             return submit_material_async(idempotency_key,text,context,learner_id)
         coach = resolve(learner_id)
@@ -182,7 +182,7 @@ def register(mcp, factory: Callable, read, write, Attempt, submit_material_async
 
     @mcp.tool(annotations=write)
     def start_coach_session(idempotency_key:str, learner_id:str|None=None, accept_outdated:bool=False, expected_plan_etag:str|None=None) -> dict[str, Any]:
-        """Start/resume using the agreed plan; retain unfinished items and freeze mechanics/settings actually used. Say the returned say_first verbatim before beginning the lesson if it has not already been spoken in this chat."""
+        """Atomically check latest review and start/resume the agreed plan. When started=false, return job_id/status and do not teach a new lesson until applied, or explicit learner agreement sets accept_outdated=true. Use expected_plan_etag from get_english_lesson_readiness. Active lessons retain their snapshot. Say returned say_first at the beginning if not already spoken."""
         return resolve(learner_id).start(idempotency_key,accept_outdated,expected_plan_etag,require_review=True)
 
     @mcp.tool(annotations=write)

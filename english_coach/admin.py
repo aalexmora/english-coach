@@ -11,9 +11,13 @@ from .homework import Homework
 from .material import MaterialIntake
 from .conversation import Conversation
 
-UI_VERSION='0.4.0'
+UI_VERSION='0.5.0'
 METRICS_VERSION='admin-metrics-1.0.0'
-UI_CHANGES=[dict(version=UI_VERSION,date='2026-10-12',status='installed_build',items=[
+UI_CHANGES=[dict(version=UI_VERSION,date='2026-10-13',status='installed_build',items=[
+    'Независимые языковые профили, онбординг и инструкции для ChatGPT Project.',
+    'Готовность следующего урока и отдельные задания методолога.',
+    'Асинхронный приём рабочих материалов с проверкой доступа перед сохранением.']),
+    dict(version='0.4.0',date='2026-10-12',status='installed_build',items=[
     'Четыре понятных раздела; методика и инструкции на одном экране.',
     'Личные черновики, пример занятия, применение, пробный урок и возврат правил.',
     'Отзывы о методике и решения без поштучных фраз и технических журналов.']),

@@ -7,7 +7,7 @@ Obsidian English backlog, IDEA-004 with links to IDEA-001/002.
 ## Published cabinet
 
 Cabinet: https://eng.moras.keenetic.pro (redirects to `/english`).
-Release: Coach **0.9.0**, UI **0.4.0**, teaching policies **1.0.0**.
+Release: Coach **0.10.0**, UI **0.5.0**, teaching policies **1.0.0**.
 Nginx first requests the credentials configured in `admin-protect`.
 The personal Saver login below is a separate second step.
 The owner leaves the login field empty and uses the existing private Saver code.
@@ -45,6 +45,44 @@ Docker/network startup and retries while its configured address is unavailable.
 Deployment verification covers HTTPS, private login, scoped reads, logout,
 installed versions and the original MCP endpoint. Provider integration and real
 lesson acceptance require separate checks; UI reads never start a model job.
+
+
+## Independent language profiles (Coach 0.10.0)
+
+Open `/english/learning` from the cabinet's “Учебные профили” link. Each OAuth
+account can create several isolated language programs without another login.
+The original English account and its history remain available in the existing
+cabinet. New profiles use `profile_id` in every language tool call.
+
+Create a profile, choose optional one-time same-language context import, then
+agree the goal, interests, minutes and approximate starting level. The configured
+methodologist proposes a program; approve the exact proposal before a lesson.
+Imported context and self-reported levels never count as independent performance.
+Copy the provided instructions to the intended ChatGPT Project; the host checks
+OAuth ownership on every operation. Project instructions are user routing, not
+an authenticated ChatGPT Project identity.
+
+`get_language_learning_context` reads the plan and readiness, `start_language_lesson`
+checks readiness and `expected_plan_version` atomically, `save_language_reply`
+saves actual replies, and `finish_language_lesson` queues the next review.
+Pause/resume preserves the active snapshot. Review changes only future lessons.
+Use `get_language_learning_job` and `retry_language_learning_job` for status/retry.
+Archiving preserves the profile data; restoration uses a current registry version.
+The language engine supports a second language without English grammar policies;
+real pedagogical outcomes and broader feature parity remain separate acceptance.
+
+Existing `start_coach_session` also checks review readiness. A queued/running
+review returns `started=false` and `job_id`; read readiness and retry the same
+start key once applied. Continuing an old plan requires explicit learner agreement
+through `accept_outdated=true`, and the session records `plan_status_at_start`.
+
+`submit_english_material` now returns immediately with `job_id` and actual status.
+Read `get_learning_material_job` separately before reporting that results were saved.
+The English extractor accepts English profiles. Raw input is held privately for at
+most 72 hours, excluded from MemoryAPI/exports and long-lived backups, and cleared
+on success/expiry. Restored queued material jobs require resubmission because their
+input is deliberately absent from backups. Worker application rechecks access and
+its lease after the model call. No learner answers are copied into another profile.
 
 ## Multi-learner backend (Coach 0.8.0)
 
@@ -134,7 +172,7 @@ by session and page. Future review snapshots include bounded conversation contex
 the next lesson shows saved correction focuses to revisit naturally. Only text
 conversation is supported; live pedagogical acceptance remains pending. The connected UI is implemented locally as described below.
 
-## Connected cabinet (UI 0.4.0)
+## Connected cabinet (UI 0.5.0)
 
 With `SAVER_ENGLISH_COACH=1`, the existing Saver host serves `/english`.
 The browser uses a private eight-hour HttpOnly, SameSite=Strict session cookie

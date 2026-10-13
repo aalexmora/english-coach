@@ -5,7 +5,7 @@ const label={draft:'Черновик',active:'Активен',archived:'В ар�
  proposed:'Ожидает подтверждения',applied:'Применён',failed:'Ошибка',stale:'Устарел',rejected:'Отклонён',expired:'Истёк'};
 const box=(name,content)=>'<section class="card"><h2>'+esc(name)+'</h2>'+content+'</section>';
 const field=(name,text,value='',required=true)=>'<label>'+esc(text)+'<input class="input" name="'+name+'" value="'+esc(value)+'" '+(required?'required':'')+' maxlength="500"></label>';
-let csrf='',profiles=[],selected=null,tab='profiles',detail=null;
+let csrf='',actor='',profiles=[],selected=null,tab='profiles',detail=null;
 const key=()=>crypto.randomUUID();
 async function request(view,post=null,params={}){
  const u=new URL('/english/api/learning',location.origin);
@@ -20,7 +20,7 @@ function message(t){el('learning-error').textContent=t;}
 function button(action,name,extra=''){return '<button class="btn soft" data-action="'+action+'" '+extra+'>'+esc(name)+'</button>';}
 function sourceOptions(target){
  const choices=profiles.filter(p=>p.profile_id!==target.profile_id&&p.language===target.language&&p.state!=='archived');
- if(target.language==='en')choices.unshift({profile_id:'owner',name:'Основной Work English'});
+ if(target.language==='en')choices.unshift({profile_id:actor,name:'Мой основной English'});
  return '<option value="">Не копировать</option>'+choices.map(p=>'<option value="'+esc(p.profile_id)+'">'+esc(p.name)+'</option>').join('');
 }
 function profileCard(p){
@@ -108,7 +108,7 @@ async function showProfile(id){
  box('Разбор не применён','<p>История ответов сохранена. Обновление плана не применено.</p>'+button('retry','Повторить разбор','data-id="'+esc(p.profile_id)+'" data-job="'+esc(ctx.readiness.job_id)+'"')):'');
 }
 async function showProfiles(){
- const data=await request('profiles');csrf=data.csrf;profiles=data.profiles;
+ const data=await request('profiles');csrf=data.csrf;actor=data.actor;profiles=data.profiles;
  el('learning-content').innerHTML='<div class="columns">'+
  box('Мои профили',profiles.length?profiles.map(profileCard).join(''):'<p>Профилей пока нет.</p>')+
  createForm()+'</div>';

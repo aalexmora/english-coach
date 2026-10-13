@@ -36,6 +36,17 @@ def test_readiness_blocks_future_lesson_until_review_is_applied(env):
     resumed = coach.start('next', accept_outdated=True, require_review=True,
                           expected_plan_etag=blocked['plan_etag'])
     assert resumed['session']['id'] != sid
+    assert resumed['outdated'] is True and resumed['plan_status'] == 'previous'
+
+
+def test_pre_release_applied_review_survives_unrelated_settings_change(env):
+    _, _, coach = env
+    p=coach.profile()
+    coach.memory.put('coach-job-old',dict(status='applied',created_at='2026-10-12',
+        applied_profile_version=p['version']),0)
+    coach.memory.put('coach-profile',dict(p['value'],instructions='New future preference'),p['version'])
+    state=coach.lesson_readiness()
+    assert state['lesson_ready'] is True and state['plan_is_current'] is True
 
 
 def test_readiness_plan_version_guard(env):
