@@ -5,3 +5,16 @@
 @media(max-width:760px){.sidebar{display:none;top:78px;width:min(280px,85vw);padding:24px}.sidebar.open{display:flex;box-shadow:5px 5px 20px #0003}.workspace{margin-left:0}.topbar{padding:12px 16px;gap:10px;min-height:78px}.mobile-menu{display:block}.profile-picker{font-size:11px;gap:4px;flex-direction:column;align-items:flex-start;flex:1;min-width:0;margin:0}.profile-picker .select{min-width:0;width:100%;max-width:260px;font-size:14px;padding:6px 8px;min-height:36px;margin:0}.topbar>.btn{padding:8px 10px;font-size:12px}main{padding:26px 16px}.page-head{align-items:flex-start;flex-direction:column;gap:0;margin-bottom:14px}h1{font-size:27px;margin-bottom:10px}.versions{justify-content:flex-start;margin:0}.versions button{padding:4px 8px 4px 0}.card{padding:22px 20px;border-radius:13px;margin-bottom:16px}.lead{font-size:20px}.rules{padding-left:20px}.columns,.columns.compact{grid-template-columns:1fr;gap:0}.row-head,.plan li{flex-wrap:wrap}.footer{padding:18px 16px;flex-direction:column;gap:5px}.footer span{font-size:11px}dialog{padding:14px 20px;width:calc(100vw - 20px);max-height:94vh}.actions .btn{width:100%}.login-wrap,.login-page{padding:16px}.route .badge{display:block;width:fit-content;margin:8px 0 0}}
 main.login{max-width:520px;margin:8vh auto;padding:20px}.login .card{padding:32px}.login .field{margin:18px 0}.login small{color:var(--muted)}
 .rules li{margin:8px 0}.rules{margin:16px 0 20px}
+
+/* Dedicated language-profile cabinet: compact, accessible, light/dark inherited */
+.learning-workspace{margin-left:0}
+.learning-topbar{min-height:68px;padding:12px 20px}
+.learning-back{margin:0}
+.learning-theme-row{display:flex;align-items:center;gap:8px}
+.learning-theme-label{margin:0;font-size:12px}
+.learning-theme-select{min-height:32px;padding:3px 5px}
+.learning-main{max-width:1000px;padding-top:20px}
+.learning-heading{margin-bottom:10px}
+.learning-nav{margin:16px 0}
+.learning-inline-actions{margin:0 0 16px}
+@media(max-width:760px){.learning-topbar{min-height:64px;padding:10px 16px}.learning-main{padding-top:16px}}
