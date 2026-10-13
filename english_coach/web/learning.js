@@ -26,7 +26,9 @@ function sourceOptions(target){
 function profileCard(p){
  return '<article class="record"><div class="row-head"><div><b>'+esc(p.name)+'</b><p class="muted small">'+
  esc(p.language)+' · '+esc(label[p.state]||p.state)+'</p></div>'+
- button('select','Открыть','data-id="'+esc(p.profile_id)+'"')+'</div></article>';
+ (p.state==='archived'?
+ button('restore','Восстановить','data-id="'+esc(p.profile_id)+'" data-version="'+p.version+'"'):
+ button('select','Открыть','data-id="'+esc(p.profile_id)+'"'))+'</div></article>';
 }
 function createForm(){
  return box('Новый учебный профиль',
@@ -134,6 +136,12 @@ document.addEventListener('click',async ev=>{
   const action=b.dataset.action,id=b.dataset.id;
   if(action==='back'){selected=null;await navigate();return;}
   if(action==='select'){await showProfile(id);return;}
+  if(action==='restore'){
+    if(!confirm('Восстановить учебный профиль?'))return;
+    await request(null,{action:'update',profile_id:id,idempotency_key:key(),
+      expected_version:Number(b.dataset.version),state:'active'});
+    await showProfiles();return;
+  }
   if(action==='reload'){await navigate();return;}
   if(action==='approve'||action==='reject'){
     const result=await request(null,{action:'approve',profile_id:id,idempotency_key:key(),
@@ -163,8 +171,15 @@ document.addEventListener('submit',async ev=>{
     await showProfiles();await showProfile(created.profile_id);return;
   }
   if(f.id==='copy-choice'){
-    if(data.source){message('Импорт контекста выбран. Для безопасного переноса используй MCP import_learning_context в ChatGPT Project.');}
-    else {el('learning-content').insertAdjacentHTML('beforeend',goalForm(detail.profile,false));message('Теперь укажи свой приблизительный уровень или выбери диагностику.');}
+    if(data.source){
+      await request(null,{action:'import',profile_id:f.dataset.id,
+        source_profile_id:data.source,idempotency_key:key()});
+      await showProfile(f.dataset.id);
+      message('Учебный контекст однократно перенесён. История попыток и оценки не копировались.');
+    } else {
+      el('learning-content').insertAdjacentHTML('beforeend',goalForm(detail.profile,false));
+      message('Теперь укажи свой приблизительный уровень или выбери диагностику.');
+    }
     return;
   }
   if(f.id==='goal-form'){
