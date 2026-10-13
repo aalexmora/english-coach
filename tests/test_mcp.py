@@ -81,7 +81,8 @@ def test_coach_over_tcp_oauth_and_restart(tmp_path):
                             assert practice==await tool('update_english_practice',args)
                             session=await tool('get_session',dict(session_id=sid))
                             await tool('update_english_session',dict(session_id=sid,expected_version=session['coach']['version'],idempotency_key='speaking-end',action='finish',explicit_end=True))
-                            started=await tool('start_coach_session',dict(idempotency_key='transfer-lesson'))
+                            # Explicitly allow the transfer lesson on the prior plan while the final review is queued.
+                            started=await tool('start_coach_session',dict(idempotency_key='transfer-lesson',accept_outdated=True))
                             assert started['coach']['value']['retrieval_opening'][0]['pattern_id']=='past_simple_questions'
                             sid=started['session']['id']
                             await tool('update_english_session',dict(session_id=sid,expected_version=started['coach']['version'],idempotency_key='transfer-begin',action='begin_item',item_id='step-clarify'))
