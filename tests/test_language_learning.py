@@ -95,3 +95,20 @@ def test_level_is_self_report_not_inferred(learning):
                                ['family'],level=None,confirmed=True)
     assert response['status']=='queued'
     assert learning.required('language-goal')['value']['level_source']=='unknown'
+
+
+def test_explicit_pause_resume_preserves_active_lesson_snapshot(learning):
+    c=learning
+    c.configure('goal','Speak Spanish in travel situations',20,['travel'],'A1',confirmed=True)
+    asyncio.run(c.run_once(FakeMethodologist(),10))
+    c.approve_plan('approve',c.context()['proposal']['version'],approved=True)
+    opened=c.start('first')
+    sid=opened['session_id']
+    paused=c.pause('pause',sid,1)
+    assert paused['phase']=='paused'
+    assert c.context()['active_session']['value']['phase']=='paused'
+    resumed=c.start('resume')
+    assert resumed['resumed'] is True
+    assert resumed['session']['value']['phase']=='active'
+    assert resumed['session']['value']['step']==opened['step']
+    assert c.start('another-start')['session']['key']=='language-session-'+sid
