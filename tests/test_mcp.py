@@ -105,7 +105,14 @@ def test_coach_over_tcp_oauth_and_restart(tmp_path):
                             material_args=dict(idempotency_key='meeting-1',text=meeting)
                             material=await tool('submit_english_material',material_args)
                             assert material==await tool('submit_english_material',material_args)
-                            assert material['saved_count']==1
+                            assert material['status'] in ('queued','running','applied')
+                            assert material['job_id'].startswith('material-job-')
+                            for _ in range(100):
+                                status=await tool('get_learning_material_job',dict(job_id=material['job_id']))
+                                if status['status'] in ('applied','failed','expired'):break
+                                await asyncio.sleep(.1)
+                            assert status['status']=='applied',status
+                            assert status['result']['saved_count']==1
                             ctx=await tool('get_english_context',{})
                             assert ctx['work_material'][0]['phrase']=='Could we clarify the delivery date before we commit?'
                             assert ctx['lesson_brief'] and ctx['work_patterns']
