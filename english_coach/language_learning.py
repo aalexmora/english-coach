@@ -125,7 +125,8 @@ class LanguageLearning:
         session=self.memory.get('language-session-'+active_id) if active_id else None
         notes=self.memory.get('language-methodology-notes')
         imported=self.memory.get('language-imported-context')
-        return dict(readiness=ready,program=plan,active_session=session,
+        proposal=self.memory.get('language-proposal')
+        return dict(readiness=ready,program=plan,proposal=proposal,active_session=session,
                     methodology_notes=notes['value'] if notes else None,
                     imported_context=imported['value'] if imported else None,
                     instructions='One question at a time. Do not call prompted imitation independent. '
