@@ -95,7 +95,7 @@ function readyProgram(p,ctx){
 async function showProfile(id){
  selected=id;const data=await request('profile',null,{profile_id:id});detail=data;
  const p=data.profile,ctx=data.context;
- el('learning-content').innerHTML='<div class="actions" style="margin:0 0 16px">'+button('back','← Все профили')+
+ el('learning-content').innerHTML='<div class="actions learning-inline-actions">'+button('back','← Все профили')+
  button('archive',p.state==='archived'?'Восстановить':'Архивировать','data-id="'+esc(id)+'" data-version="'+p.version+'" data-state="'+(p.state==='archived'?'active':'archived')+'"')+'</div>'+
  box(p.name,'<p class="muted">'+esc(p.language)+' · '+esc(label[p.state]||p.state)+'</p><p>План: '+
  esc(ctx.readiness.status)+' · '+(ctx.readiness.lesson_ready?'готов':'ожидает')+'</p>')+
