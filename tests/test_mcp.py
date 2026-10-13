@@ -65,7 +65,7 @@ def test_coach_over_tcp_oauth_and_restart(tmp_path):
                         if phase=='coach-speaking-read':
                             from datetime import datetime,timezone
                             ctx=await tool('get_english_context',{})
-                            assert ctx['methodology']['coach_version']=='0.9.0'
+                            assert ctx['methodology']['coach_version']=='0.10.0'
                             assert ctx['methodology']['profile_version']==ctx['profile']['version']
                             assert ctx['work_material'][0]['phrase']=='Could we clarify the delivery date before we commit?'
                             practice=next(p for p in ctx['speaking']['open_practices'] if p['key']==entry_id['practice'])
@@ -81,7 +81,8 @@ def test_coach_over_tcp_oauth_and_restart(tmp_path):
                             assert practice==await tool('update_english_practice',args)
                             session=await tool('get_session',dict(session_id=sid))
                             await tool('update_english_session',dict(session_id=sid,expected_version=session['coach']['version'],idempotency_key='speaking-end',action='finish',explicit_end=True))
-                            started=await tool('start_coach_session',dict(idempotency_key='transfer-lesson'))
+                            # Explicitly allow the transfer lesson on the prior plan while the final review is queued.
+                            started=await tool('start_coach_session',dict(idempotency_key='transfer-lesson',accept_outdated=True))
                             assert started['coach']['value']['retrieval_opening'][0]['pattern_id']=='past_simple_questions'
                             sid=started['session']['id']
                             await tool('update_english_session',dict(session_id=sid,expected_version=started['coach']['version'],idempotency_key='transfer-begin',action='begin_item',item_id='step-clarify'))
@@ -105,7 +106,14 @@ def test_coach_over_tcp_oauth_and_restart(tmp_path):
                             material_args=dict(idempotency_key='meeting-1',text=meeting)
                             material=await tool('submit_english_material',material_args)
                             assert material==await tool('submit_english_material',material_args)
-                            assert material['saved_count']==1
+                            assert material['status'] in ('queued','running','applied')
+                            assert material['job_id'].startswith('material-job-')
+                            for _ in range(100):
+                                status=await tool('get_learning_material_job',dict(job_id=material['job_id']))
+                                if status['status'] in ('applied','failed','expired'):break
+                                await asyncio.sleep(.1)
+                            assert status['status']=='applied',status
+                            assert status['result']['saved_count']==1
                             ctx=await tool('get_english_context',{})
                             assert ctx['work_material'][0]['phrase']=='Could we clarify the delivery date before we commit?'
                             assert ctx['lesson_brief'] and ctx['work_patterns']

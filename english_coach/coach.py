@@ -224,10 +224,61 @@ class Coach:
         items.sort(key=lambda item:item['created_at'], reverse=True)
         return items[:5]
 
-    def start(self, key):
+    def plan_etag(self, profile=None):
+        """Plan identity independent of unrelated profile/settings version bumps."""
+        p = profile or self.profile()
+        import json
+        return key_for('plan', json.dumps(p['value'].get('plan', []), sort_keys=True, ensure_ascii=False))
+
+    def lesson_readiness(self):
+        """Read-only summary; start() repeats this check inside its transaction."""
+        p = self.profile()
+        jobs = sorted(self.documents('coach-job-'),
+                      key=lambda d: (d['value'].get('created_at', ''), d['key']), reverse=True)
+        latest = jobs[0] if jobs else None
+        status = latest['value']['status'] if latest else 'none'
+        if status not in ('queued', 'running', 'applied', 'failed', 'stale', 'superseded', 'none'):
+            status = 'failed'  # unknown states must never become silent permission to start
+        active = self.legacy.progress()['active_sessions']
+        etag = self.plan_etag(p)
+        applied_etag = (latest['value'].get('applied_plan_etag') if latest else None)
+        if status == 'applied' and applied_etag is None:
+            applied_version = latest['value'].get('applied_profile_version')
+            offset = 0
+            while applied_version is not None:
+                history = self.memory.history('coach-profile', 50, offset)
+                previous = next((h for h in history if h['version'] == applied_version), None)
+                if previous:
+                    applied_etag = self.plan_etag(previous)
+                    break
+                if len(history) < 50:
+                    break
+                offset += 50
+        if status == 'applied' and applied_etag is None:
+            current = latest['value'].get('applied_profile_version') == p['version']
+        else:
+            current = (applied_etag == etag) if status == 'applied' else None
+        blocked = status in ('queued', 'running', 'failed', 'stale') or (status == 'applied' and not current)
+        return dict(learner_id=self.learner_id, status=status,
+                    job_id=latest['key'] if latest else None,
+                    plan_etag=etag, profile_version=p['version'],
+                    plan_is_current=current, lesson_ready=not blocked,
+                    active_session_id=active[0]['id'] if active else None,
+                    action=('resume' if active else
+                            'check_job' if status in ('queued', 'running') else
+                            'retry_or_explicit_old_plan' if blocked else 'start'))
+
+    def start(self, key, accept_outdated=False, expected_plan_etag=None, require_review=False):
         def action():
             p = self.profile()
             old_active = self.legacy.progress()['active_sessions']
+            readiness = self.lesson_readiness()
+            if not old_active:
+                readiness = self.lesson_readiness()
+                if expected_plan_etag is not None and expected_plan_etag != readiness['plan_etag']:
+                    raise ValueError('Plan version conflict; refresh lesson readiness')
+                if require_review and not readiness['lesson_ready'] and not accept_outdated:
+                    return dict(started=False, **readiness)
             s = self.legacy.start(key_for(key,'start'), p['value']['goal']['outcome'], [])
             current = self.memory.get('coach-session-'+s['id'])
             if current:
@@ -257,6 +308,8 @@ class Coach:
                 items=[dict(i,mechanic=effective['settings']['preferred_mechanic'],mechanic_version=1) for i in items]
             for item in items: policies.check_activity(policy,item['mechanic'],item['task'],item.get('activity','communicative'))
             v = dict(teaching_policy=policy,grammar_permissions={},learner_id=self.learner_id, session_id=s['id'], phase='active', items=items, branch=None, profile_version=p['version'],
+                     plan_status_at_start='current' if readiness['lesson_ready'] else 'previous',
+                     review_status_at_start=readiness['status'],
                      settings_snapshot=deepcopy(effective['settings']),goal_snapshot=deepcopy(effective['goal']),
                      instruction_snapshot=contract(policy,effective['settings']),method_trial_id=trial['value']['id'] if trial else None,
                      current_item_id=None, usages=[], feedback=[],
@@ -273,9 +326,20 @@ class Coach:
             if carry:
                 self.memory.put('coach-carry', dict(items=[]), carry['version'])
             return dict(say_first=self.opening_line(p),
+                        plan_status=v['plan_status_at_start'],
+                        outdated=v['plan_status_at_start']=='previous',
                         session=self.get_session(s['id'])['session'], coach=doc,
                         **self.session_state(s['id']))
-        return self.request(key, 'start', {}, action)
+        # A blocked readiness check must not cache a permanent result under the start key.
+        # A later retry with the same key can proceed once the review becomes applied.
+        with self.memory.atomic():
+            if not self.legacy.progress()['active_sessions']:
+                readiness = self.lesson_readiness()
+                if require_review and not readiness['lesson_ready'] and not accept_outdated:
+                    return dict(started=False, **readiness)
+            return self.request(key, 'start',
+                                dict(accept_outdated=accept_outdated, expected_plan_etag=expected_plan_etag, require_review=require_review),
+                                action)
 
     def get_session(self, sid):
         result = self.legacy.get(sid)
@@ -337,7 +401,9 @@ class Coach:
                         job_id=doc['key'], status=value['status'], applied=applied,
                         applied_profile_version=value.get('applied_profile_version'),
                         current_profile_version=profile['version'],
-                        plan_is_current=applied and profile['version']==value.get('applied_profile_version'),
+                        plan_is_current=(value.get('applied_plan_etag') == self.plan_etag(profile)
+                                         if applied and value.get('applied_plan_etag')
+                                         else applied and profile['version']==value.get('applied_profile_version')),
                         plan_scope='Future lessons; the active lesson retains its saved items',
                         terminal=value['status'] not in ('queued','running'),
                         result=value.get('result'), error=value.get('error'))
