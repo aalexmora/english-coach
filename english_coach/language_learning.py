@@ -153,7 +153,11 @@ class LanguageLearning:
         def action():
             ready=self.readiness()
             if ready['active_session_id']:
-                return dict(started=False,resumed=True,session=self.required('language-session-'+ready['active_session_id']))
+                existing=self.required('language-session-'+ready['active_session_id'])
+                if existing['value']['phase']=='paused':
+                    resumed=self.memory.put(existing['key'],dict(existing['value'],phase='active'),existing['version'])
+                    return dict(started=False,resumed=True,session=resumed)
+                return dict(started=False,resumed=True,session=existing)
             if expected_plan_version is not None and expected_plan_version!=ready['plan_version']:
                 raise ValueError('Plan version conflict')
             if not ready['lesson_ready'] and not (accept_outdated and ready['plan_version'] is not None):
@@ -178,6 +182,19 @@ class LanguageLearning:
                 return dict(started=False,**ready)
             return self.memory.request(key,dict(op='language-start',expected_plan_version=expected_plan_version,
                                                 accept_outdated=accept_outdated),action)
+
+    def pause(self,key,session_id,expected_session_version):
+        """Pause without losing the immutable lesson snapshot or pending observations."""
+        def action():
+            doc=self.required('language-session-'+session_id)
+            if doc['version']!=expected_session_version:raise ValueError('Version conflict')
+            active=self.required('language-active')
+            if active['value'].get('session_id')!=session_id:raise ValueError('Session is not active')
+            if doc['value']['phase']!='active':raise ValueError('Only an active lesson can be paused')
+            saved=self.memory.put(doc['key'],dict(doc['value'],phase='paused'),doc['version'])
+            return dict(session_id=session_id,session_version=saved['version'],phase='paused')
+        return self.memory.request(key,dict(op='language-pause',
+            session_id=session_id,expected_session_version=expected_session_version),action)
 
     def observe(self,key,session_id,expected_session_version,reply,feedback='',assistance='independent'):
         if assistance not in ('independent','hint','immediate_repeat'):raise ValueError('Invalid assistance')
