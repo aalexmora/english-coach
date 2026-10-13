@@ -105,7 +105,7 @@ async function showProfile(id){
  (ctx.readiness.status==='queued'||ctx.readiness.status==='running'?
  box('Разбор в работе','<p>Job ID: '+esc(ctx.readiness.job_id)+'</p>'+button('reload','Проверить готовность')):'')+
  (ctx.readiness.status==='failed'||ctx.readiness.status==='stale'?
- box('Разбор не применён','<p>История ответов сохранена. Обновление плана не применено.</p><p>Можно обратиться к методологу в проектном чате для повторного разбора.</p>'):'');
+ box('Разбор не применён','<p>История ответов сохранена. Обновление плана не применено.</p>'+button('retry','Повторить разбор','data-id="'+esc(p.profile_id)+'" data-job="'+esc(ctx.readiness.job_id)+'"')):'');
 }
 async function showProfiles(){
  const data=await request('profiles');csrf=data.csrf;profiles=data.profiles;
@@ -143,6 +143,12 @@ document.addEventListener('click',async ev=>{
     await showProfiles();return;
   }
   if(action==='reload'){await navigate();return;}
+  if(action==='retry'){
+    if(!confirm('Повторить разбор методолога на актуальных данных?'))return;
+    await request(null,{action:'retry',profile_id:id,
+      job_id:b.dataset.job,idempotency_key:key()});
+    await showProfile(id);return;
+  }
   if(action==='approve'||action==='reject'){
     const result=await request(null,{action:'approve',profile_id:id,idempotency_key:key(),
        expected_proposal_version:Number(b.dataset.version),approved:action==='approve'});
