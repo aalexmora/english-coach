@@ -99,6 +99,21 @@ class LanguageLearning:
             if len(docs)<100:return out
             offset+=100
 
+    def recent_sessions(self,limit=5):
+        """Bounded real learner evidence; use completed lessons, never invent scores."""
+        docs=[];offset=0
+        while True:
+            page=self.memory.list('language-session-',100,offset)
+            docs.extend(page)
+            if len(page)<100:break
+            offset+=100
+        finished=[d for d in docs if d['value']['phase']=='finished']
+        finished.sort(key=lambda d:d['value'].get('finished_at',''),reverse=True)
+        return [dict(id=d['value']['id'],step=d['value']['step'],
+                     finished_at=d['value']['finished_at'],
+                     observations=d['value']['observations'][-6:])
+                for d in finished[:limit]]
+
     def latest_job(self):
         return next(iter(sorted(self.jobs(),key=lambda d:(d['value']['created_at'],d['key']),reverse=True)),None)
 
@@ -127,6 +142,7 @@ class LanguageLearning:
         imported=self.memory.get('language-imported-context')
         proposal=self.memory.get('language-proposal')
         return dict(readiness=ready,program=plan,proposal=proposal,active_session=session,
+                    recent_lessons=self.recent_sessions(),
                     methodology_notes=notes['value'] if notes else None,
                     imported_context=imported['value'] if imported else None,
                     instructions='One question at a time. Do not call prompted imitation independent. '
@@ -248,7 +264,7 @@ class LanguageLearning:
                          'new prompts for the next session, and select an existing step ID. '
                          'Do not treat a hinted or repeated reply as independent success.')
                 inp=dict(language=self.language,goal=snapshot['goal']['value'],
-                         plan=plan,lesson=session,
+                         plan=plan,lesson=session,previous_lessons=self.recent_sessions(4),
                          imported=(self.memory.get('language-imported-context') or {}).get('value'))
                 raw=await asyncio.wait_for(provider._complete(system,inp,LanguageReview.model_json_schema(),
                                            'language_review'),timeout)
