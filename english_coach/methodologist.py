@@ -136,6 +136,37 @@ class DisabledProvider:
 class TestProvider:
     """Deterministic test double; never advertised as an AI/live pedagogical evaluation."""
     __test__ = False
+    async def _complete(self, system, payload, schema, name):
+        """Synthetic multilingual fixture only; production uses external methodologist."""
+        if name=='language_program':
+            language=payload['language']
+            goal=payload['requested_goal']['goal']
+            return dict(rationale='Synthetic learning progression for the agreed goal: '+goal,
+                        steps=[dict(id='dialogue',topic='Talk about the goal',
+                                    communicative_goal='Express the desired outcome',
+                                    prompts=['Practice in '+language+' about: '+goal,
+                                             'Ask one follow-up question in '+language],
+                                    success_criterion='Produce an independent question'),
+                               dict(id='story',topic='Tell a personal story',
+                                    communicative_goal='Explain an experience related to the goal',
+                                    prompts=['Describe an experience in '+language,
+                                             'Explain why it matters in '+language],
+                                    success_criterion='Explain an experience independently'),
+                               dict(id='opinion',topic='Compare alternatives',
+                                    communicative_goal='Discuss a choice',
+                                    prompts=['Compare two options in '+language,
+                                             'Ask another speaker for an opinion in '+language],
+                                    success_criterion='Discuss two options independently')])
+        if name=='language_review':
+            step=payload['plan']['steps'][0]
+            return dict(summary='Synthetic review; evidence remains unverified',
+                        next_step_id=step['id'],
+                        next_prompts=['Try a different situation in '+payload['language'],
+                                      'Ask another independent question in '+payload['language']],
+                        rationale='Check independent transfer in a new situation',
+                        learning_findings=['Requires later independent verification'])
+        raise ValueError('Unknown synthetic provider operation')
+
     async def analyze_material(self, snapshot):
         # Deterministic contract fixture, not pedagogical analysis.
         phrase = re.split(r'(?<=[.!?])\s+', snapshot['text'].strip(), maxsplit=1)[0][:120]
