@@ -7,7 +7,7 @@ Obsidian English backlog, IDEA-004 with links to IDEA-001/002.
 ## Published cabinet
 
 Cabinet: https://eng.moras.keenetic.pro (redirects to `/english`).
-Release: Coach **0.10.1**, UI **0.5.1**, teaching policies **1.0.0**.
+Release: Coach **0.10.2**, UI **0.5.2**, teaching policies **1.0.0**.
 Nginx first requests the credentials configured in `admin-protect`.
 The personal Saver login below is a separate second step.
 An optional separate administrator login/password can be configured for the cabinet.
@@ -175,7 +175,7 @@ by session and page. Future review snapshots include bounded conversation contex
 the next lesson shows saved correction focuses to revisit naturally. Only text
 conversation is supported; live pedagogical acceptance remains pending. The connected UI is implemented locally as described below.
 
-## Connected cabinet (UI 0.5.1)
+## Connected cabinet (UI 0.5.2)
 
 With `SAVER_ENGLISH_COACH=1`, the existing Saver host serves `/english`.
 The browser uses a private eight-hour HttpOnly, SameSite=Strict session cookie

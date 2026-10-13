@@ -129,3 +129,17 @@ def test_failed_methodologist_job_has_explicit_idempotent_retry(learning):
     assert c.retry_job('retry',job['key'])==retried
     result=asyncio.run(c.run_once(FakeMethodologist(),10))
     assert result['status']=='proposed'
+
+
+def test_context_keeps_confirmed_goal_after_program_approval_without_read_mutations(learning):
+    c=learning
+    c.configure('goal','Speak Spanish in travel situations',20,['travel'],'A1',confirmed=True)
+    asyncio.run(c.run_once(FakeMethodologist(),10))
+    before=c.context()
+    assert before['goal']['value']['goal']=='Speak Spanish in travel situations'
+    c.approve_plan('approve',before['proposal']['version'],approved=True)
+    docs=c.memory.list('',100)
+    after=c.context()
+    assert after['goal']==before['goal']
+    assert after['program'] and after['readiness']['lesson_ready']
+    assert c.memory.list('',100)==docs

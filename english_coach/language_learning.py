@@ -134,6 +134,11 @@ class LanguageLearning:
                        ('start' if not blocked else 'check_job' if status in ('queued','running') else 'retry_or_previous_plan'))
 
     def context(self):
+        with self.memory.atomic():
+            return self._context()
+
+    def _context(self):
+        goal=self.memory.get('language-goal')
         plan=self.memory.get('language-program')
         ready=self.readiness()
         active_id=ready['active_session_id']
@@ -141,7 +146,7 @@ class LanguageLearning:
         notes=self.memory.get('language-methodology-notes')
         imported=self.memory.get('language-imported-context')
         proposal=self.memory.get('language-proposal')
-        return dict(readiness=ready,program=plan,proposal=proposal,active_session=session,
+        return dict(goal=goal,readiness=ready,program=plan,proposal=proposal,active_session=session,
                     recent_lessons=self.recent_sessions(),
                     methodology_notes=notes['value'] if notes else None,
                     imported_context=imported['value'] if imported else None,
