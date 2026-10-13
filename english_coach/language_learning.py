@@ -217,7 +217,7 @@ class LanguageLearning:
         return self.memory.request(key,dict(op='language-finish',session_id=session_id,
                               version=expected_session_version,explicit_end=explicit_end),action)
 
-    async def run_once(self,provider,timeout):
+    async def run_once(self,provider,timeout,authorized=None):
         """Claim one durable job; reject stale snapshots and invalid model output."""
         with self.memory.atomic():
             claim=None
@@ -293,8 +293,10 @@ class LanguageLearning:
                 stale=stale or (program['version'] if program else 0)!=snapshot['program_version']
             else:
                 stale=stale or not program or program['version']!=snapshot['program']['version']
+            if authorized is not None and not authorized():
+                stale=True
             if stale:
-                final=dict(current['value'],status='stale',error='Input versions changed',
+                final=dict(current['value'],status='stale',error='Input versions changed or profile access revoked',
                            lease=None,updated_at=clock())
             else:
                 if v['kind']=='initial_plan':
