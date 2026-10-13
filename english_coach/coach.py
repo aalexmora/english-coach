@@ -246,7 +246,7 @@ class Coach:
             current = latest['value'].get('applied_profile_version') == p['version']
         else:
             current = (applied_etag == etag) if status == 'applied' else None
-        blocked = status in ('queued', 'running', 'failed', 'stale')
+        blocked = status in ('queued', 'running', 'failed', 'stale') or (status == 'applied' and not current)
         return dict(learner_id=self.learner_id, status=status,
                     job_id=latest['key'] if latest else None,
                     plan_etag=etag, profile_version=p['version'],
@@ -313,9 +313,16 @@ class Coach:
             return dict(say_first=self.opening_line(p),
                         session=self.get_session(s['id'])['session'], coach=doc,
                         **self.session_state(s['id']))
-        return self.request(key, 'start',
-                            dict(accept_outdated=accept_outdated, expected_plan_etag=expected_plan_etag),
-                            action)
+        # A blocked readiness check must not cache a permanent result under the start key.
+        # A later retry with the same key can proceed once the review becomes applied.
+        with self.memory.atomic():
+            if not self.legacy.progress()['active_sessions']:
+                readiness = self.lesson_readiness()
+                if not readiness['lesson_ready'] and not accept_outdated:
+                    return dict(started=False, **readiness)
+            return self.request(key, 'start',
+                                dict(accept_outdated=accept_outdated, expected_plan_etag=expected_plan_etag),
+                                action)
 
     def get_session(self, sid):
         result = self.legacy.get(sid)
