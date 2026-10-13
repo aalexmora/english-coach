@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Учебные профили · Learning Coach</title>
+<script src="/english/assets/theme.js"></script>
+<link rel="stylesheet" href="/english/assets/styles.css">
+<script src="/english/assets/learning.js" defer></script>
+</head>
+<body>
+<div class="workspace" style="margin-left:0">
+  <header class="topbar" style="min-height:68px;padding:12px 20px">
+    <a href="/english" class="text-link" style="margin:0">← English Coach</a>
+    <div style="display:flex;align-items:center;gap:8px">
+      <label style="margin:0;font-size:12px">Тема
+        <select id="learning-theme" class="select" style="min-height:32px;padding:3px 5px">
+          <option value="system">Система</option>
+          <option value="light">Светлая</option>
+          <option value="dark">Тёмная</option>
+        </select>
+      </label>
+    </div>
+  </header>
+  <main id="main" style="max-width:1000px;padding-top:20px">
+    <h1 style="margin-bottom:10px">Учебные профили</h1>
+    <p class="muted small">Разные цели, языки и планы под одной учётной записью. Данные каждого профиля изолированы.</p>
+    <nav class="actions" aria-label="Разделы" style="margin:16px 0">
+      <button class="btn primary" id="profiles-tab" data-tab="profiles" aria-current="page">Профили</button>
+      <button class="btn soft" id="jobs-tab" data-tab="jobs">Задания методолога</button>
+    </nav>
+    <div id="learning-content" role="status">Загружаем…</div>
+    <p id="learning-error" class="form-error" role="alert"></p>
+  </main>
+</div>
+</body>
+</html>
