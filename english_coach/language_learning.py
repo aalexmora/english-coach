@@ -342,6 +342,37 @@ class LanguageLearning:
             self.memory.put(claim['key'],final,current['version'])
             return dict(job_id=claim['key'],status=final['status'])
 
+    def retry_job(self,key,job_id):
+        """Explicitly enqueue fresh review after terminal failure or stale input."""
+        if not job_id.startswith('language-job-'):
+            raise ValueError('Invalid language job ID')
+        def action():
+            previous=self.required(job_id)
+            v=previous['value']
+            if v['status'] not in ('failed','stale','rejected'):
+                raise ValueError('Only failed, stale or rejected jobs can be retried')
+            goal=self.required('language-goal')
+            program=self.memory.get('language-program')
+            if v['kind']=='initial_plan':
+                if program:
+                    raise ValueError('Plan already available; propose goal changes separately')
+                snapshot=dict(goal=goal,program_version=0)
+            elif v['kind']=='review':
+                sid=v['snapshot']['session']['value']['id']
+                session=self.required('language-session-'+sid)
+                if session['value']['phase']!='finished':
+                    raise ValueError('Only finished lessons may be reviewed')
+                if program is None:raise ValueError('No approved plan')
+                snapshot=dict(goal=goal,program=program,session=session)
+            else:
+                raise ValueError('Unknown job kind')
+            fresh_id='language-job-'+identity(key,'retry')
+            self.memory.put(fresh_id,dict(kind=v['kind'],status='queued',snapshot=snapshot,
+                           attempts=0,created_at=clock(),updated_at=clock(),
+                           lease=None,error=None,retry_of=job_id),0)
+            return dict(job_id=fresh_id,status='queued',retry_of=job_id)
+        return self.memory.request(key,dict(op='language-retry-job',job_id=job_id),action)
+
     def approve_plan(self,key,expected_proposal_version,approved=False):
         """Only an explicit learner decision can apply an initial plan proposal."""
         def action():
