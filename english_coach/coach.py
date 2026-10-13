@@ -224,10 +224,48 @@ class Coach:
         items.sort(key=lambda item:item['created_at'], reverse=True)
         return items[:5]
 
-    def start(self, key):
+    def plan_etag(self, profile=None):
+        """Plan identity independent of unrelated profile/settings version bumps."""
+        p = profile or self.profile()
+        import json
+        return key_for('plan', json.dumps(p['value'].get('plan', []), sort_keys=True, ensure_ascii=False))
+
+    def lesson_readiness(self):
+        """Read-only summary; start() repeats this check inside its transaction."""
+        p = self.profile()
+        jobs = sorted(self.documents('coach-job-'),
+                      key=lambda d: (d['value'].get('created_at', ''), d['key']), reverse=True)
+        latest = jobs[0] if jobs else None
+        status = latest['value']['status'] if latest else 'none'
+        if status not in ('queued', 'running', 'applied', 'failed', 'stale', 'superseded', 'none'):
+            status = 'failed'  # unknown states must never become silent permission to start
+        active = self.legacy.progress()['active_sessions']
+        etag = self.plan_etag(p)
+        applied_etag = (latest['value'].get('applied_plan_etag') if latest else None)
+        if status == 'applied' and applied_etag is None:
+            current = latest['value'].get('applied_profile_version') == p['version']
+        else:
+            current = (applied_etag == etag) if status == 'applied' else None
+        blocked = status in ('queued', 'running', 'failed', 'stale')
+        return dict(learner_id=self.learner_id, status=status,
+                    job_id=latest['key'] if latest else None,
+                    plan_etag=etag, profile_version=p['version'],
+                    plan_is_current=current, lesson_ready=not blocked,
+                    active_session_id=active[0]['id'] if active else None,
+                    action=('resume' if active else
+                            'check_job' if status in ('queued', 'running') else
+                            'retry_or_explicit_old_plan' if blocked else 'start'))
+
+    def start(self, key, accept_outdated=False, expected_plan_etag=None):
         def action():
             p = self.profile()
             old_active = self.legacy.progress()['active_sessions']
+            if not old_active:
+                readiness = self.lesson_readiness()
+                if expected_plan_etag is not None and expected_plan_etag != readiness['plan_etag']:
+                    raise ValueError('Plan version conflict; refresh lesson readiness')
+                if not readiness['lesson_ready'] and not accept_outdated:
+                    return dict(started=False, **readiness)
             s = self.legacy.start(key_for(key,'start'), p['value']['goal']['outcome'], [])
             current = self.memory.get('coach-session-'+s['id'])
             if current:
@@ -275,7 +313,9 @@ class Coach:
             return dict(say_first=self.opening_line(p),
                         session=self.get_session(s['id'])['session'], coach=doc,
                         **self.session_state(s['id']))
-        return self.request(key, 'start', {}, action)
+        return self.request(key, 'start',
+                            dict(accept_outdated=accept_outdated, expected_plan_etag=expected_plan_etag),
+                            action)
 
     def get_session(self, sid):
         result = self.legacy.get(sid)
@@ -337,7 +377,9 @@ class Coach:
                         job_id=doc['key'], status=value['status'], applied=applied,
                         applied_profile_version=value.get('applied_profile_version'),
                         current_profile_version=profile['version'],
-                        plan_is_current=applied and profile['version']==value.get('applied_profile_version'),
+                        plan_is_current=(value.get('applied_plan_etag') == self.plan_etag(profile)
+                                         if applied and value.get('applied_plan_etag')
+                                         else applied and profile['version']==value.get('applied_profile_version')),
                         plan_scope='Future lessons; the active lesson retains its saved items',
                         terminal=value['status'] not in ('queued','running'),
                         result=value.get('result'), error=value.get('error'))
