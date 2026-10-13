@@ -32,7 +32,7 @@ def test_readiness_blocks_future_lesson_until_review_is_applied(env):
     assert blocked['started'] is False
     assert blocked['status'] == 'queued'
     assert coach.legacy.progress()['active_sessions'] == []
-    assert coach.start('next') == blocked
+    assert coach.start('next', require_review=True) == blocked
     resumed = coach.start('next', accept_outdated=True, require_review=True,
                           expected_plan_etag=blocked['plan_etag'])
     assert resumed['session']['id'] != sid
