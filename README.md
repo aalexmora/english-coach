@@ -7,10 +7,13 @@ Obsidian English backlog, IDEA-004 with links to IDEA-001/002.
 ## Published cabinet
 
 Cabinet: https://eng.moras.keenetic.pro (redirects to `/english`).
-Release: Coach **0.10.0**, UI **0.5.0**, teaching policies **1.0.0**.
+Release: Coach **0.10.1**, UI **0.5.1**, teaching policies **1.0.0**.
 Nginx first requests the credentials configured in `admin-protect`.
 The personal Saver login below is a separate second step.
-The owner leaves the login field empty and uses the existing private Saver code.
+An optional separate administrator login/password can be configured for the cabinet.
+When enabled, use the displayed administrator login; the owner Saver OAuth code
+is no longer accepted by this UI form. Without that setting the owner leaves
+the login field empty and uses the existing private Saver code.
 Family members use their personal login/code. Codes are never included in Git.
 
 The cabinet runs inside the existing `mcp-gpt-saver` Docker container at
@@ -172,7 +175,7 @@ by session and page. Future review snapshots include bounded conversation contex
 the next lesson shows saved correction focuses to revisit naturally. Only text
 conversation is supported; live pedagogical acceptance remains pending. The connected UI is implemented locally as described below.
 
-## Connected cabinet (UI 0.5.0)
+## Connected cabinet (UI 0.5.1)
 
 With `SAVER_ENGLISH_COACH=1`, the existing Saver host serves `/english`.
 The browser uses a private eight-hour HttpOnly, SameSite=Strict session cookie
@@ -712,3 +715,14 @@ Feedback answers are part of the strict review result and commit only with a
 fresh input snapshot. Goal/load changes still require the learner's decision.
 
 Authoritative requirements and acceptance remain in the linked Obsidian backlog.
+
+## UI administrator credentials
+
+The host may set SAVER_ENGLISH_WEB_ADMIN_LOGIN and SAVER_ENGLISH_WEB_ADMIN_HASH
+together. The alias maps to the existing owner, not a new OAuth account. Generate
+the password hash with the host Accounts.password_hash helper; keep the actual
+credentials only in private deployment configuration. Quote the PBKDF2 hash in
+Compose env files so dollar separators stay literal. Owner browser cookies from
+the previous login mode are rejected; password rotation invalidates administrator
+cookies. Family accounts, Saver OAuth login codes and NPM Access Lists stay under
+their existing independent configuration.

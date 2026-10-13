@@ -222,7 +222,7 @@ def test_real_host_routes_and_read_mcp_catalog(tmp_path,monkeypatch):
     with TestClient(app,base_url=BASE) as client:
         assert login(client).status_code==303
         assert client.get('/english/api/view',params=params('owner')).json()['configured'] is False
-        assert client.get('/english/api/view',params=params('owner','settings')).json()['ui_version']=='0.5.0'
+        assert client.get('/english/api/view',params=params('owner','settings')).json()['ui_version']=='0.5.1'
         assert client.get('/health').status_code==200
 
 
