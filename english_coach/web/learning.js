@@ -5,7 +5,7 @@ const label={draft:'Черновик',active:'Активен',archived:'В ар�
  proposed:'Ожидает подтверждения',applied:'Применён',failed:'Ошибка',stale:'Устарел',rejected:'Отклонён',expired:'Истёк'};
 const box=(name,content)=>'<section class="card"><h2>'+esc(name)+'</h2>'+content+'</section>';
 const field=(name,text,value='',required=true)=>'<label>'+esc(text)+'<input class="input" name="'+name+'" value="'+esc(value)+'" '+(required?'required':'')+' maxlength="500"></label>';
-let csrf='',actor='',profiles=[],selected=null,tab='profiles',detail=null;
+let csrf='',actor='',profiles=[],selected=new URLSearchParams(location.hash.slice(1)).get('profile'),tab='profiles',detail=null;
 const key=()=>crypto.randomUUID();
 async function request(view,post=null,params={}){
  const u=new URL('/english/api/learning',location.origin);
@@ -85,7 +85,7 @@ function projectInstructions(p){
 function readyProgram(p,ctx){
  const program=ctx?.program;if(!program)return '';
  return box('Действующий план',
-  '<p class="muted small">Версия '+program.version+' · '+esc(ctx.readiness.status)+
+  '<p class="muted small">Версия '+program.version+' · '+esc(label[ctx.readiness.status]||ctx.readiness.status)+
   ' · следующий этап: '+esc(program.value.next_step_id)+'</p>'+
   '<ol class="route">'+program.value.steps.map(s=>'<li><b>'+esc(s.topic)+
   '</b><p>'+esc(s.communicative_goal)+'</p></li>').join('')+'</ol>'+
@@ -95,12 +95,14 @@ function readyProgram(p,ctx){
   button('copy-project','Копировать инструкции','data-id="'+esc(p.profile_id)+'"')+'</details>');
 }
 async function showProfile(id){
- selected=id;const data=await request('profile',null,{profile_id:id});detail=data;
+ selected=id;history.replaceState(null,'','#'+new URLSearchParams({profile:id}));const data=await request('profile',null,{profile_id:id});detail=data;
  const p=data.profile,ctx=data.context;
  el('learning-content').innerHTML='<div class="actions learning-inline-actions">'+button('back','← Все профили')+
  button('archive',p.state==='archived'?'Восстановить':'Архивировать','data-id="'+esc(id)+'" data-version="'+p.version+'" data-state="'+(p.state==='archived'?'active':'archived')+'"')+'</div>'+
+ '<a class="text-link" href="/english#'+new URLSearchParams({profile:id,page:'home'})+'">На главную этого профиля →</a>'+
  box(p.name,'<p class="muted">'+esc(p.language)+' · '+esc(label[p.state]||p.state)+'</p><p>План: '+
- esc(ctx.readiness.status)+' · '+(ctx.readiness.lesson_ready?'готов':'ожидает')+'</p>')+
+ esc(label[ctx.readiness.status]||ctx.readiness.status)+' · '+(ctx.readiness.lesson_ready?'готов':'ожидает')+'</p>')+
+ (ctx.goal?box('К чему идём','<p class="lead">'+esc(ctx.goal.value.goal)+'</p><p class="muted">'+ctx.goal.value.minutes+' минут на урок · '+esc(ctx.goal.value.interests.join(', '))+'</p>'):'')+
  onboarding(p,ctx)+proposedPlan(p,ctx)+readyProgram(p,ctx)+
  (ctx.readiness.status==='queued'||ctx.readiness.status==='running'?
  box('Разбор в работе','<p>Job ID: '+esc(ctx.readiness.job_id)+'</p>'+button('reload','Проверить готовность')):'')+
@@ -132,9 +134,9 @@ async function navigate(){
 document.addEventListener('click',async ev=>{
  const b=ev.target.closest('button');if(!b)return;
  try{
-  if(b.dataset.tab){tab=b.dataset.tab;selected=null;await navigate();return;}
+  if(b.dataset.tab){tab=b.dataset.tab;selected=null;history.replaceState(null,'',location.pathname);await navigate();return;}
   const action=b.dataset.action,id=b.dataset.id;
-  if(action==='back'){selected=null;await navigate();return;}
+  if(action==='back'){selected=null;history.replaceState(null,'',location.pathname);await navigate();return;}
   if(action==='select'){await showProfile(id);return;}
   if(action==='restore'){
     if(!confirm('Восстановить учебный профиль?'))return;
@@ -158,7 +160,7 @@ document.addEventListener('click',async ev=>{
     if(!confirm('Изменить состояние профиля? История сохраняется.'))return;
     await request(null,{action:'update',profile_id:id,idempotency_key:key(),
       expected_version:Number(b.dataset.version),state:b.dataset.state});
-    selected=null;await showProfiles();return;
+    selected=null;history.replaceState(null,'',location.pathname);await showProfiles();return;
   }
   if(action==='copy-project'){
     await navigator.clipboard.writeText(projectInstructions(detail.profile));
@@ -200,4 +202,4 @@ document.addEventListener('submit',async ev=>{
 const theme=el('learning-theme');
 theme.value=document.documentElement.dataset.themeMode||'system';
 theme.addEventListener('change',()=>window.coachTheme(theme.value,true));
-(async()=>{try{await navigate();}catch(e){message('Кабинет недоступен: '+e.message);}})();
+(async()=>{try{const data=await request('profiles');csrf=data.csrf;actor=data.actor;profiles=data.profiles;await navigate();}catch(e){message('Кабинет недоступен: '+e.message);}})();

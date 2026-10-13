@@ -31,7 +31,9 @@ def observation(key,assistance='independent',outcome='correct',at=None):
 @pytest.fixture
 def web(tmp_path):
     store=Store(tmp_path/'memory.sqlite',tmp_path/'export');provider=AuthProvider(tmp_path/'auth.sqlite',BASE,hashlib.sha256(OWNER.encode()).hexdigest())
-    def make(user):return Coach(MemoryAPI(store,user,'english',['english']),LegacyEnglishAPI(store,user,['english']))
+    def make(user):
+        store.register_user(user,('english',))
+        return Coach(MemoryAPI(store,user,'english',['english']),LegacyEnglishAPI(store,user,['english']))
     c=make('owner');c.configure('goal',dict(outcome='Simple questions',minutes=15,milestones=['Past events'],skills=[dict(id='past',outcome='Ask about yesterday',pattern_ids=['past_simple_questions'])]),confirmed=True)
     member=provider.create_learner('owner',['memory:english'],'family','Family test')
     app=Starlette(routes=routes(provider,make)+[Route('/enroll',provider.enroll,methods=['GET','POST'])])
@@ -222,7 +224,7 @@ def test_real_host_routes_and_read_mcp_catalog(tmp_path,monkeypatch):
     with TestClient(app,base_url=BASE) as client:
         assert login(client).status_code==303
         assert client.get('/english/api/view',params=params('owner')).json()['configured'] is False
-        assert client.get('/english/api/view',params=params('owner','settings')).json()['ui_version']=='0.5.0'
+        assert client.get('/english/api/view',params=params('owner','settings')).json()['ui_version']=='0.5.2'
         assert client.get('/health').status_code==200
 
 
@@ -285,3 +287,37 @@ def test_methodology_workflow_via_authenticated_ui_and_scoped_views(web):
         assert client.get('/english/api/view',params=params('owner','methodology')).status_code==403
         v=client.get('/english/api/view',params=params(kid,'methodology')).json()
         assert v['management']['draft'] is None and v['configured'] is False
+
+
+def test_language_profile_home_data_is_owned_read_only_and_keeps_original_learning(web,tmp_path):
+    from saver.learning_profiles import init_learning_profiles,create_learning_profile,update_learning_profile
+    from english_coach.language_learning import LanguageLearning
+    app,provider,owner,member,kid=web
+    init_learning_profiles(provider)
+    a=create_learning_profile(provider,'owner',['memory:english'],'home-es','Viajes','es')
+    b=create_learning_profile(provider,'owner',['memory:english'],'home-en','Work','en')
+    foreign=create_learning_profile(provider,kid,['memory:english'],'foreign','Private','es')
+    archived=create_learning_profile(provider,'owner',['memory:english'],'archive','Archived','es')
+    update_learning_profile(provider,'owner',['memory:english'],archived['profile_id'],'archive-it',1,state='archived')
+    store=Store(tmp_path/'memory.sqlite',tmp_path/'export')
+    for p,goal in [(a,'Spanish for a family trip'),(b,'English for work meetings'),(foreign,'Private family goal')]:
+        store.register_user(p['storage_scope_id'],('english',))
+        coach=LanguageLearning(MemoryAPI(store,p['storage_scope_id'],'english',['english']),p['language'])
+        coach.configure('goal',goal,20,['travel'],confirmed=True)
+    with TestClient(app,base_url=BASE) as client:
+        assert login(client).status_code==303
+        own=client.get('/english/api/learning',params={'view':'profiles'}).json()['profiles']
+        assert {p['profile_id'] for p in own}=={a['profile_id'],b['profile_id'],archived['profile_id']}
+        for p,goal in [(a,'Spanish for a family trip'),(b,'English for work meetings')]:
+            url={'view':'profile','profile_id':p['profile_id']}
+            before=client.get('/english/api/learning',params=url).json()
+            assert before['context']['goal']['value']['goal']==goal
+            assert before['context']['readiness']['status']=='queued'
+            assert before['context']['program'] is None and before['context']['active_session'] is None
+            assert before['context']['recent_lessons']==[]
+            assert client.get('/english/api/learning',params=url).json()==before
+        for p in [foreign,archived]:
+            assert client.get('/english/api/learning',params={'view':'profile','profile_id':p['profile_id']}).status_code==403
+        legacy=client.get('/english/api/view',params=params('owner','home')).json()
+        assert legacy['goal']['outcome']=='Simple questions'
+        assert client.get('/english/learning').status_code==200
