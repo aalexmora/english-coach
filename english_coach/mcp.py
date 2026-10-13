@@ -158,6 +158,11 @@ def register(mcp, factory: Callable, read, write, Attempt):
         return resolve(learner_id).context(detail,interaction_mode)
 
     @mcp.tool(annotations=read)
+    def get_english_lesson_readiness(learner_id:str|None=None) -> dict[str, Any]:
+        """Read the latest relevant review job and current plan identity before starting a new lesson. No mutation."""
+        return resolve(learner_id).lesson_readiness()
+
+    @mcp.tool(annotations=read)
     def get_english_session_state(session_id:str, learner_id:str|None=None) -> dict[str, Any]:
         """Read only authorized session_version, coach_version, phase, current item/practice and next_action/next_item. No attempts, due bank, full plan or settings, no model call or mutation. Useful for conflict recovery and voice continuation. Context supplies extra scheduled/curriculum suggestions."""
         return resolve(learner_id).session_state(session_id)
