@@ -112,3 +112,20 @@ def test_explicit_pause_resume_preserves_active_lesson_snapshot(learning):
     assert resumed['session']['value']['phase']=='active'
     assert resumed['session']['value']['step']==opened['step']
     assert c.start('another-start')['session']['key']=='language-session-'+sid
+
+
+def test_failed_methodologist_job_has_explicit_idempotent_retry(learning):
+    c=learning
+    original=c.configure('goal','Speak Spanish in travel situations',20,
+                         ['travel'],'A1',confirmed=True)
+    job=c.required(original['job_id'])
+    with pytest.raises(ValueError,match='Only failed'):
+        c.retry_job('invalid-early',job['key'])
+    c.memory.put(job['key'],dict(job['value'],status='failed',error='Synthetic provider error'),
+                 job['version'])
+    retried=c.retry_job('retry',job['key'])
+    assert retried['status']=='queued'
+    assert retried['retry_of']==job['key']
+    assert c.retry_job('retry',job['key'])==retried
+    result=asyncio.run(c.run_once(FakeMethodologist(),10))
+    assert result['status']=='proposed'
