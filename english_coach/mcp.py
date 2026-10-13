@@ -181,7 +181,7 @@ def register(mcp, factory: Callable, read, write, Attempt):
     @mcp.tool(annotations=write)
     def start_coach_session(idempotency_key:str, learner_id:str|None=None, accept_outdated:bool=False, expected_plan_etag:str|None=None) -> dict[str, Any]:
         """Start/resume using the agreed plan; retain unfinished items and freeze mechanics/settings actually used. Say the returned say_first verbatim before beginning the lesson if it has not already been spoken in this chat."""
-        return resolve(learner_id).start(idempotency_key,accept_outdated,expected_plan_etag)
+        return resolve(learner_id).start(idempotency_key,accept_outdated,expected_plan_etag,require_review=True)
 
     @mcp.tool(annotations=write)
     def save_english_progress(session_id:str, idempotency_key:str, attempts:list[Attempt], feedback:list[Feedback]=[], discoveries:list[Discovery]=[], learner_id:str|None=None,
