@@ -9,12 +9,12 @@
 <script src="/english/assets/learning.js" defer></script>
 </head>
 <body>
-<div class="workspace" style="margin-left:0">
-  <header class="topbar" style="min-height:68px;padding:12px 20px">
-    <a href="/english" class="text-link" style="margin:0">← English Coach</a>
-    <div style="display:flex;align-items:center;gap:8px">
-      <label style="margin:0;font-size:12px">Тема
-        <select id="learning-theme" class="select" style="min-height:32px;padding:3px 5px">
+<div class="workspace learning-workspace">
+  <header class="topbar learning-topbar">
+    <a href="/english" class="text-link learning-back">← English Coach</a>
+    <div class="learning-theme-row">
+      <label class="learning-theme-label">Тема
+        <select id="learning-theme" class="select learning-theme-select">
           <option value="system">Система</option>
           <option value="light">Светлая</option>
           <option value="dark">Тёмная</option>
@@ -22,10 +22,10 @@
       </label>
     </div>
   </header>
-  <main id="main" style="max-width:1000px;padding-top:20px">
-    <h1 style="margin-bottom:10px">Учебные профили</h1>
+  <main id="main" class="learning-main">
+    <h1 class="learning-heading">Учебные профили</h1>
     <p class="muted small">Разные цели, языки и планы под одной учётной записью. Данные каждого профиля изолированы.</p>
-    <nav class="actions" aria-label="Разделы" style="margin:16px 0">
+    <nav class="actions learning-nav" aria-label="Разделы">
       <button class="btn primary" id="profiles-tab" data-tab="profiles" aria-current="page">Профили</button>
       <button class="btn soft" id="jobs-tab" data-tab="jobs">Задания методолога</button>
     </nav>
